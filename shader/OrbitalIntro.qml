@@ -5,9 +5,10 @@ import "Scene.js" as Scene
 
 // The login intro: the Vereda Labs mark, centred on black at the boot logo's size (so it
 // carries on from the boot screen), names this machine's ship, then turns in space and flies
-// down into the Orbital, its long stroke settling along the band toward the ribbon (projected
-// through the scene's own camera, so it lands where the band is). There the stroke becomes a
-// window onto the Orbital and the dark falls away around it. About five seconds.
+// down into the Orbital, its long stroke landing along the band toward the ribbon and then
+// spreading over the band's whole visible arc, edge to edge (all projected through the
+// scene's own camera, so it lies exactly on the band). Its ivory fades into the Orbital
+// beneath, and the dark falls away around it. About six seconds.
 Item {
   id: intro
 
@@ -29,20 +30,18 @@ Item {
   visible: false
 
   property var setup: null
-  property real k: 0                    // the mark's journey from the screen to the band, 0..1
+  property real k: 0                    // the mark's journey: flight and landing to 0.6, then the spread
   property real fill: 1                 // the long stroke's ivory, fading to a window onto the Orbital
   property real shortStroke: 1
   property real nameShown: 0
   property real veil: 1
 
-  readonly property real ease: k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2
-  readonly property real bend: Math.max(0, (ease - 0.5) / 0.5)   // the ring's curve comes in as it lands
-  function outline(poly) {
+  function outline(poly, spread) {
     if (!setup) return []
-    return Scene.introOutline(setup, poly, ease, bend * bend).map(function (q) { return Qt.point(q[0], q[1]) })
+    return Scene.introOutline(setup, poly, k, spread).map(function (q) { return Qt.point(q[0], q[1]) })
   }
-  readonly property var longPath: outline(Scene.markLong)
-  readonly property var shortPath: outline(Scene.markShort)
+  readonly property var longPath: outline(Scene.markLong, true)
+  readonly property var shortPath: outline(Scene.markShort, false)
 
   // The hole the long stroke cuts in the dark.
   Item {
@@ -104,13 +103,14 @@ Item {
     PauseAnimation { duration: 800 }
     ParallelAnimation {
       NumberAnimation { target: intro; property: "nameShown"; to: 0; duration: 400; easing.type: Easing.InQuad }
-      NumberAnimation { target: intro; property: "k"; to: 1; duration: 2800 }
+      NumberAnimation { target: intro; property: "k"; to: 1; duration: 3800 }
       SequentialAnimation {
-        PauseAnimation { duration: 1500 }
-        ParallelAnimation {
-          NumberAnimation { target: intro; property: "shortStroke"; to: 0; duration: 700; easing.type: Easing.InQuad }
-          NumberAnimation { target: intro; property: "fill"; to: 0; duration: 1100; easing.type: Easing.InOutQuad }
-        }
+        PauseAnimation { duration: 1700 }
+        NumberAnimation { target: intro; property: "shortStroke"; to: 0; duration: 600; easing.type: Easing.InQuad }
+      }
+      SequentialAnimation {
+        PauseAnimation { duration: 3200 }
+        NumberAnimation { target: intro; property: "fill"; to: 0; duration: 1100; easing.type: Easing.InOutQuad }
       }
     }
     NumberAnimation { target: intro; property: "veil"; to: 0; duration: 800; easing.type: Easing.InOutQuad }

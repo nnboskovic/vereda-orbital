@@ -315,27 +315,52 @@ function introSetup(p, v, w, h, markPx) {
     if (dot(n1, up) > 0) { end = {r: r1, u: u1, n: n1}; break; }
   }
   var toP = sub(P, v.cam), d1 = Math.sqrt(dot(toP, toP));
-  return {v: v, aspect: aspect, w: w, h: h, D: D, unit0: unit0, unit1: (p.introLength || 7000) / 144.4,
+  // The band's visible arc, for the stroke to spread over: the range of phi on screen,
+  // stretched just past the frame (but kept in front of the camera).
+  var lo = 1e9, hi = -1e9;
+  for (var gx = 0; gx <= 32; gx++) for (var gy = 0; gy <= 18; gy++) {
+    var hit = skyPoint(v, p.width, gx / 16 - 1, gy / 9 - 1, aspect, 10);
+    if (!hit) continue;
+    var ph = Math.atan2(hit.pos[1], hit.pos[0]);
+    lo = Math.min(lo, ph); hi = Math.max(hi, ph);
+  }
+  var edge = p.width / 2 + 140, alt = R - Math.sqrt(P[0] * P[0] + P[1] * P[1]);
+  var inFront = function (ph) { return project(v, ringPt(ph, alt, edge), aspect) && project(v, ringPt(ph, alt, -edge), aspect); };
+  var near = lo - 0.03; while (!inFront(near) && near < lo) near += 0.005;
+  var across = dot(end.u, [0, 0, 1]) * Math.cos(a) - dot(end.r, [0, 0, 1]) * Math.sin(a) > 0 ? 1 : -1;
+  return {near: near, far: hi + 0.08, edge: edge * across,
+          v: v, aspect: aspect, w: w, h: h, D: D, unit0: unit0, unit1: (p.introLength || 7000) / 144.4,
           d1: d1, dir1: mul(toP, 1 / d1), P: P, phi: phi, z: P[2], alt: R - Math.sqrt(P[0] * P[0] + P[1] * P[1]),
           q0: quatFromBasis(v.right, v.up, mul(v.fwd, -1)), q1: quatFromBasis(end.r, end.u, end.n), end: end};
 }
 
-// The outline of a stroke at progress k (0..1) with the ring's curvature blended in by bend,
-// as screen points [x, y] in logical px (edges subdivided so the curve shows).
-function introOutline(s, poly, k, bend) {
-  var axes = quatAxes(quatSlerp(s.q0, s.q1, k)), unit = s.unit0 * Math.pow(s.unit1 / s.unit0, k);
-  var c = add(s.v.cam, mul(slerpDir(s.v.fwd, s.dir1, k), s.D * Math.pow(s.d1 / s.D, k)));
-  var out = [], n = 10;
+// The outline of a stroke at progress k (0..1), as screen points [x, y] in logical px. Until
+// k = 0.6 the mark flies as a rigid plane and lands on the band, the ring's curve coming in as
+// it does; after that the long stroke spreads over the band's whole visible arc, from just
+// behind the frame's near edge to past the ribbon, edge to edge. Edges are subdivided so the
+// curve shows; spread says whether this stroke spreads (the long one) or stays (the short one).
+function introOutline(s, poly, k, spread) {
+  var fa = Math.min(1, k / 0.6), a = fa < 0.5 ? 4 * fa * fa * fa : 1 - Math.pow(-2 * fa + 2, 3) / 2;
+  var fb = Math.max(0, (k - 0.6) / 0.4), b = spread ? fb * fb * (3 - 2 * fb) : 0;
+  var bend = Math.pow(Math.max(0, (a - 0.5) / 0.5), 2);
+  var axes = quatAxes(quatSlerp(s.q0, s.q1, a)), unit = s.unit0 * Math.pow(s.unit1 / s.unit0, a);
+  var c = add(s.v.cam, mul(slerpDir(s.v.fwd, s.dir1, a), s.D * Math.pow(s.d1 / s.D, a)));
+  var span = s.far - s.near, out = [], n = 16;
   for (var i = 0; i < poly.length; i++) {
-    var a = poly[i], b = poly[(i + 1) % poly.length];
+    var p0 = poly[i], p1 = poly[(i + 1) % poly.length];
     for (var j = 0; j < n; j++) {
-      var t = j / n, mu = a[0] + (b[0] - a[0]) * t, mv = a[1] + (b[1] - a[1]) * t;
-      var X = add(c, mul(add(mul(axes[0], mu), mul(axes[1], mv)), unit));
-      if (bend > 0) {
-        var wv = mul(add(mul(s.end.r, mu), mul(s.end.u, mv)), s.unit1);
-        var along = dot(wv, tanAt(s.phi)), flat = add(s.P, wv);
-        var curved = ringPt(s.phi + along / (R - s.alt), s.alt, s.z + wv[2]);
-        X = add(X, mul(sub(curved, flat), bend));
+      var t = j / n, mu = p0[0] + (p1[0] - p0[0]) * t, mv = p0[1] + (p1[1] - p0[1]) * t, X;
+      var wv = mul(add(mul(s.end.r, mu), mul(s.end.u, mv)), s.unit1);
+      var landPhi = s.phi + dot(wv, tanAt(s.phi)) / (R - s.alt), landZ = s.z + wv[2];
+      if (b > 0) {
+        // the stroke's four edges map onto the arc: its long sides to the band's two edges,
+        // its ends to straight cuts across the band beyond each end of the frame
+        var ph = i === 0 ? s.near + span * t : i === 1 ? s.far : i === 2 ? s.far - span * t : s.near;
+        var zz = i === 0 ? s.edge : i === 1 ? s.edge * (1 - 2 * t) : i === 2 ? -s.edge : -s.edge * (1 - 2 * t);
+        X = ringPt(landPhi + (ph - landPhi) * b, s.alt, landZ + (zz - landZ) * b);
+      } else {
+        X = add(c, mul(add(mul(axes[0], mu), mul(axes[1], mv)), unit));
+        if (bend > 0) X = add(X, mul(sub(ringPt(landPhi, s.alt, landZ), add(s.P, wv)), bend));
       }
       var sp = project(s.v, X, s.aspect);
       if (sp) out.push([(sp[0] + 1) / 2 * s.w, (1 - sp[1]) / 2 * s.h]);
