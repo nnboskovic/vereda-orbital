@@ -3,3 +3,7 @@
 # local state written by install.sh
 .previous-theme
 __pycache__/
+# rendered by sound/render.js and sound/lab/build.js
+sound/out/
+sound/lab/*.wav
+sound/lab/index.html
