@@ -30,11 +30,14 @@ Item {
   visible: false
 
   property var setup: null
-  property real k: 0                    // the mark's journey: flight and landing to 0.5, then the stretch
-  property real fill: 1                 // the long stroke's ivory, fading to a window onto the Orbital
-  property real shortStroke: 1
+  property real k: 0                    // the mark's journey, one smooth move from the screen to the arc
   property real nameShown: 0
-  property real veil: 1
+  function smooth(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x) }
+  // All tied to the one move: the short stroke goes early, the long one's ivory thins into
+  // the Orbital as it stretches over it, and the dark lifts as it arrives.
+  readonly property real shortStroke: 1 - smooth((k - 0.05) / 0.35)
+  readonly property real fill: 1 - smooth((k - 0.4) / 0.55)
+  readonly property real veil: 1 - smooth((k - 0.72) / 0.28)
 
   function outline(poly, spread) {
     if (!setup) return []
@@ -66,7 +69,7 @@ Item {
       maskInverted: true
       maskSource: hole
       maskThresholdMin: 0.5
-      maskSpreadAtMin: 0.25
+      maskSpreadAtMin: 0.06
     }
   }
 
@@ -98,21 +101,13 @@ Item {
 
   SequentialAnimation {
     id: run
-    ScriptAction { script: { intro.k = 0; intro.fill = 1; intro.shortStroke = 1; intro.nameShown = 0; intro.veil = 1 } }
+    ScriptAction { script: { intro.k = 0; intro.nameShown = 0 } }
     NumberAnimation { target: intro; property: "nameShown"; to: 1; duration: 700; easing.type: Easing.InOutQuad }
-    PauseAnimation { duration: 800 }
+    PauseAnimation { duration: 700 }
     ParallelAnimation {
-      NumberAnimation { target: intro; property: "nameShown"; to: 0; duration: 400; easing.type: Easing.InQuad }
-      NumberAnimation { target: intro; property: "k"; to: 1; duration: 4600 }
-      SequentialAnimation {
-        PauseAnimation { duration: 1700 }
-        NumberAnimation { target: intro; property: "shortStroke"; to: 0; duration: 600; easing.type: Easing.InQuad }
-      }
+      NumberAnimation { target: intro; property: "nameShown"; to: 0; duration: 450; easing.type: Easing.InQuad }
+      NumberAnimation { target: intro; property: "k"; to: 1; duration: 4400 }
     }
-    // the whole arc in ivory for a beat, then it fades into the Orbital and the dark falls away
-    PauseAnimation { duration: 350 }
-    NumberAnimation { target: intro; property: "fill"; to: 0; duration: 1300; easing.type: Easing.InOutQuad }
-    NumberAnimation { target: intro; property: "veil"; to: 0; duration: 800; easing.type: Easing.InOutQuad }
     ScriptAction { script: intro.visible = false }
   }
 }

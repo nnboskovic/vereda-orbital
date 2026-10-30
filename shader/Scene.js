@@ -334,37 +334,34 @@ function introSetup(p, v, w, h, markPx) {
           q0: quatFromBasis(v.right, v.up, mul(v.fwd, -1)), q1: quatFromBasis(end.r, end.u, end.n), end: end};
 }
 
-// The outline of a stroke at progress k (0..1), as screen points [x, y] in logical px. Until
-// k = 0.5 the mark flies as a rigid plane and lands on the band, the ring's curve coming in as
-// it does; after that the long stroke stretches over the band's whole visible arc, from just
-// behind the frame's near edge to past the ribbon, and fills out edge to edge. Edges are subdivided so the
-// curve shows; spread says whether this stroke spreads (the long one) or stays (the short one).
 function smooth01(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); }
 
+// The outline of a stroke at progress k (0..1), as screen points [x, y] in logical px. One
+// smooth move: the mark turns in space as a rigid plane toward lying along the band, and all
+// the while the long stroke stretches toward the band's whole visible arc (from just behind
+// the frame's near edge to past the ribbon, edge to edge), arriving there as the move ends.
+// Edges are subdivided so the curve shows; spread says whether this stroke stretches (the
+// long one) or only turns (the short one, which fades early).
 function introOutline(s, poly, k, spread) {
-  var fa = Math.min(1, k / 0.5), a = fa < 0.5 ? 4 * fa * fa * fa : 1 - Math.pow(-2 * fa + 2, 3) / 2;
-  // the long side stretches along the band first, all the way down and up to the ribbon,
-  // then fills out to the band's edges
-  var fb = Math.max(0, (k - 0.5) / 0.5), b = spread ? smooth01(fb / 0.7) : 0, bw = spread ? smooth01((fb - 0.25) / 0.75) : 0;
-  var bend = Math.pow(Math.max(0, (a - 0.5) / 0.5), 2);
-  var axes = quatAxes(quatSlerp(s.q0, s.q1, a)), unit = s.unit0 * Math.pow(s.unit1 / s.unit0, a);
-  var c = add(s.v.cam, mul(slerpDir(s.v.fwd, s.dir1, a), s.D * Math.pow(s.d1 / s.D, a)));
+  var a = 0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, Math.min(1, k)));
+  var r = smooth01(a / 0.8), w = spread ? smooth01((a - 0.1) / 0.9) : 0, bend = r * r;
+  var axes = quatAxes(quatSlerp(s.q0, s.q1, r)), unit = s.unit0 * Math.pow(s.unit1 / s.unit0, r);
+  var c = add(s.v.cam, mul(slerpDir(s.v.fwd, s.dir1, r), s.D * Math.pow(s.d1 / s.D, r)));
   var span = s.far - s.near, out = [], n = 16;
   for (var i = 0; i < poly.length; i++) {
     var p0 = poly[i], p1 = poly[(i + 1) % poly.length];
     for (var j = 0; j < n; j++) {
-      var t = j / n, mu = p0[0] + (p1[0] - p0[0]) * t, mv = p0[1] + (p1[1] - p0[1]) * t, X;
+      var t = j / n, mu = p0[0] + (p1[0] - p0[0]) * t, mv = p0[1] + (p1[1] - p0[1]) * t;
       var wv = mul(add(mul(s.end.r, mu), mul(s.end.u, mv)), s.unit1);
       var landPhi = s.phi + dot(wv, tanAt(s.phi)) / (R - s.alt), landZ = s.z + wv[2];
-      if (b > 0) {
-        // the stroke's four edges map onto the arc: its long sides to the band's two edges,
-        // its ends to straight cuts across the band beyond each end of the frame
+      var X = add(c, mul(add(mul(axes[0], mu), mul(axes[1], mv)), unit));
+      X = add(X, mul(sub(ringPt(landPhi, s.alt, landZ), add(s.P, wv)), bend));
+      if (w > 0) {
+        // its four edges head for the arc: the long sides to the band's two edges, the ends
+        // to straight cuts across the band beyond each end of the frame
         var ph = i === 0 ? s.near + span * t : i === 1 ? s.far : i === 2 ? s.far - span * t : s.near;
         var zz = i === 0 ? s.edge : i === 1 ? s.edge * (1 - 2 * t) : i === 2 ? -s.edge : -s.edge * (1 - 2 * t);
-        X = ringPt(landPhi + (ph - landPhi) * b, s.alt, landZ + (zz - landZ) * bw);
-      } else {
-        X = add(c, mul(add(mul(axes[0], mu), mul(axes[1], mv)), unit));
-        if (bend > 0) X = add(X, mul(sub(ringPt(landPhi, s.alt, landZ), add(s.P, wv)), bend));
+        X = add(X, mul(sub(ringPt(ph, s.alt, zz), X), w));
       }
       var sp = project(s.v, X, s.aspect);
       if (sp) out.push([(sp[0] + 1) / 2 * s.w, (1 - sp[1]) / 2 * s.h]);

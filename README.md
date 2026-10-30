@@ -117,11 +117,11 @@ Manual*, the studio's own) names it for the pieces below.
 
 ## The way in
 
-At login the Vereda Labs mark sits centred on black and names the ship, then turns
-in space and flies down into the Orbital: its long stroke lands along the band toward
-the ribbon, stretches all the way down the band and fills its whole visible arc, edge to edge, holds, and its ivory
-fades into the Orbital beneath while the dark falls away (`OrbitalIntro.qml`, about
-eight seconds). The move is real 3D, projected through the scene's own camera
+At login the Vereda Labs mark sits centred on black and names the ship, then in one
+smooth move its long stroke rotates and stretches down into the Orbital until it covers
+the band's whole visible arc, edge to edge, its ivory thinning into the Orbital beneath as
+it goes while the dark lifts around it (`OrbitalIntro.qml`, about six seconds). The move is
+real 3D, projected through the scene's own camera
 (`Scene.introSetup` and `Scene.introOutline`), so the stroke lies exactly on the band.
 It plays when the shell starts within 90 s of Hyprland (whose instance signature
 carries its start time), so restarting the shell later does not replay it;
