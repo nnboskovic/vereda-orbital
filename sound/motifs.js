@@ -104,10 +104,11 @@ function rhodes(f, dur, o = {}) {
   const release = Math.min(0.35, dur * 0.3);
   let pc = 0, pm = 0, pt = 0;
   for (let i = 0; i < n; i++) {
-    const t = i / SR, idx = vel * (1.1 * Math.exp(-t / 0.09) + 0.22);
+    const t = i / SR, idx = o.wurli ? vel * (1.45 * Math.exp(-t / 0.05) + 0.45) : vel * (1.1 * Math.exp(-t / 0.09) + 0.22);
     pc += 2 * Math.PI * f / SR; pm += 2 * Math.PI * f / SR; pt += 2 * Math.PI * f * 7 / SR;
     const env = smooth(t / 0.003) * Math.exp(-t / decay) * (1 - smooth((t - (dur - release)) / release));
-    const s = (Math.sin(pc + idx * Math.sin(pm)) + 0.035 * vel * Math.exp(-t / 0.025) * Math.sin(pt)) * env * vel;
+    const reed = o.wurli ? 0.28 * vel * Math.exp(-t / 0.08) * Math.sin(2 * pm) : 0;
+    const s = (Math.sin(pc + idx * Math.sin(pm) + reed) + 0.035 * vel * Math.exp(-t / 0.025) * Math.sin(pt)) * env * vel;
     const tr = Math.sin(2 * Math.PI * rate * t);
     out.L[i] = s * (1 - depth * (0.5 + 0.5 * tr)); out.R[i] = s * (1 - depth * (0.5 - 0.5 * tr));
   }
@@ -346,6 +347,114 @@ function theme(flavour) {
   return finish(tr, -5, {wet: 0.38});
 }
 
+
+// ---------------------------------------------------------------- the way in: digital
+// An homage to Daft Punk's Digital Love, in sound and feel (the notes are its own): a filtered
+// disco loop at 125 BPM, Wurlitzer chords pulsing in swung eighths, a vocoder-ish "ooh" pad
+// pumping against a soft four-on-the-floor, claps on two and four, an octave-jumping bass, and
+// a bright, round synth run climbing like that famous solo. The bar lines are set so a
+// downbeat lands on the bloom: the mark hears a muffled pickup and the cell on the Wurlitzer;
+// the zoom opens the filter as the drums come in over Dmaj9, C#m9, Bm9, E9sus; the bloom is
+// Amaj9 wide open, the lead holding the cell's resolution; one more bar, then the filter closes.
+function clap() {
+  const n = Math.ceil(0.3 * SR), raw = new Float32Array(n), r = rng(61);
+  for (let i = 0; i < n; i++) {
+    const t = i / SR, hits = [0, 0.011, 0.023].reduce((a, h) => a + (t >= h ? Math.exp(-(t - h) / (h === 0.023 ? 0.09 : 0.006)) : 0), 0);
+    raw[i] = (r() * 2 - 1) * hits;
+  }
+  return biquad(biquad(raw, "bp", 1150, 0.9), "hp", 500, 0.7);
+}
+function hat(seed) { return biquad(noise(0.08, "white", seed, t => Math.exp(-t / 0.018)), "hp", 7000, 0.7); }
+// A round lead: a pulse (two band-limited saws, one shifted) gliding between notes, softened by
+// a lowpass, with a little vibrato. line: [[time, "E5", length], ...].
+function lead(line, dur, o = {}) {
+  const n = Math.ceil(dur * SR), out = new Float32Array(n), width = o.width || 0.32;
+  const saw = (ph, dt) => { let s = 2 * ph - 1; if (ph < dt) { const x = ph / dt; s -= x + x - x * x - 1; } else if (ph > 1 - dt) { const x = (ph - 1) / dt; s -= x * x + x + x + 1; } return s; };
+  let ph = 0, f = hz(line[0][1]);
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    let k = -1; for (let j = 0; j < line.length; j++) if (line[j][0] <= t) k = j;
+    let amp = 0;
+    if (k >= 0) {
+      const [t0, nm, len] = line[k], since = t - t0, target = hz(nm);
+      f += (target - f) * (1 - Math.exp(-1 / (SR * 0.012)));                // portamento
+      amp = since < len ? smooth(since / 0.006) * (1 - smooth((since - len + 0.04) / 0.04)) : 0;
+    }
+    const vf = f * (1 + 0.004 * smooth((t - (line[Math.max(k, 0)][0])) / 0.25) * Math.sin(2 * Math.PI * 5.5 * t)), dt = vf / SR;
+    ph += dt; if (ph >= 1) ph -= 1;
+    let p2 = ph + width; if (p2 >= 1) p2 -= 1;
+    out[i] = (saw(ph, dt) - saw(p2, dt)) * 0.5 * amp;
+  }
+  return lp24(out, o.cut || 2600);
+}
+
+function themeDigital() {
+  const tr = track(11), loop = track(11), pump = track(11);
+  const BPM = 125, beat = 60 / BPM, down = BLOOM - 8 * beat;          // bar 1's downbeat: the bloom is bar 3's
+  const at = k => down + k * beat, swing = 0.035;                      // beat k from bar 1; upbeats swung late
+  const chords = [
+    {from: -4, to: 2, keys: ["F#3", "A3", "C#4", "E4"], pad: ["F#4", "A4", "E5"], root: "D2"},
+    {from: 2, to: 4, keys: ["E3", "G#3", "B3", "D#4"], pad: ["E4", "G#4", "D#5"], root: "C#2"},
+    {from: 4, to: 6, keys: ["D3", "F#3", "A3", "C#4"], pad: ["D4", "F#4", "C#5"], root: "B1"},
+    {from: 6, to: 8, keys: ["D3", "F#3", "A3", "B3"], pad: ["D4", "A4", "B4"], root: "E2"},
+    {from: 8, to: 16, keys: ["G#3", "B3", "C#4", "E4"], pad: ["G#4", "C#5", "E5"], root: "A1"},
+  ];
+  const chordAt = k => chords.find(c => k >= c.from && k < c.to);
+
+  // the loop: Wurlitzer chords in swung eighths, from the pickup to the end
+  for (let k = -3; k < 16; k += 0.5) {
+    const c = chordAt(Math.floor(k)), up = k % 1 !== 0, t = at(k) + (up ? swing : 0);
+    if (t < 0) continue;
+    const fade = k >= 12 ? 1 - (k - 12) / 4 : 1;
+    placeSt(loop, rhodesChord(c.keys, 0.42, {wurli: true, vel: (up ? 0.36 : 0.5) * fade, decay: 0.3, trem: 5.6, tremDepth: 0.16, roll: 0.004}), t, 0.5, 0.35);
+  }
+  // the "ooh" pad, one per chord, pumping against the kick
+  for (const c of chords) {
+    const t0 = Math.max(0, at(c.from)), len = at(Math.min(c.to, 14)) - t0 + 0.25;
+    placeSt(pump, pad(notes(c.pad), len, {attack: 0.25, release: 0.3, cut: () => 2600, formants: [430, 1080], seed: 31 + c.from}), t0, 0.5, 0.45);
+  }
+  // the bass: root on the beat, its octave on the swung upbeat, from bar 1
+  const bl = [];
+  for (let k = 0; k < 15; k += 0.5) {
+    const c = chordAt(Math.floor(k)), up = k % 1 !== 0, root = c.root, oct = root.replace(/\d/, d => +d + 1);
+    bl.push([at(k) + (up ? swing : 0) - at(0), up ? oct : root]);
+  }
+  place(loop, bass(bl, at(15) - at(0), {pluck: true, glide: 0.018, attack: 0.01, release: 0.4}), at(0), 0.62, 0, 0.08);
+  // drums: a soft four-on-the-floor, hats on the upbeats, claps on two and four
+  const kicks = [];
+  for (let k = 0; k < 16; k++) {
+    const g = k >= 12 ? 1 - (k - 12) / 4.5 : 1;
+    place(loop, kick(), at(k), 0.62 * g, 0, 0.04); kicks.push(at(k));
+    place(loop, hat(70 + k), at(k + 0.5) + swing, 0.07 * g, 0.25, 0.15);
+    if (k % 2 === 1) place(loop, clap(), at(k), 0.3 * g, -0.05, 0.35);
+  }
+  // the pump: the pad ducks under each kick and swells back
+  const duck = t => { let d = 0; for (const kt of kicks) if (t >= kt && t - kt < 0.4) d = Math.max(d, smooth((t - kt) / 0.006) * Math.exp(-(t - kt) / 0.13)); return 1 - 0.55 * d; };
+  for (const side of ["L", "R", "sL", "sR"]) for (let i = 0; i < pump.n; i++) pump[side][i] *= duck(i / SR);
+  // the filter over the loop and the pad: muffled for the mark, sweeping open through the zoom,
+  // wide at the bloom, closing again at the end
+  const cut = t => t < MOVE ? 420 : t < BLOOM ? 600 * Math.pow(14, smooth((t - MOVE) / (BLOOM - MOVE))) : t < at(12) ? 11000 : 11000 * Math.pow(0.05, smooth((t - at(12)) / (at(16) - at(12))));
+  for (const bus of [loop, pump]) {
+    for (const side of ["L", "R", "sL", "sR"]) bus[side] = lp24(bus[side], cut, 1.9);
+    for (const side of ["L", "R", "sL", "sR"]) for (let i = 0; i < tr.n; i++) tr[side][i] += bus[side][i] * smooth(i / SR / 0.35);
+  }
+  // the cell on the Wurlitzer, clear over the muffled pickup, as the mark appears
+  [["E5", -2.5], ["A4", -2], ["B5", -1]].forEach(([nm, k]) => placeSt(tr, rhodes(hz(nm), 1.6, {wurli: true, vel: 0.72, trem: 5.6, tremDepth: 0.18}), at(k) + (k % 1 ? swing : 0), 0.46, 0.4));
+  // the run, climbing through the last two beats before the bloom, then the lead holds the
+  // cell's resolution, C#, and settles on A
+  const run = ["E4", "F#4", "A4", "B4", "D5", "E5", "F#5", "A5", "B5", "D6", "E6"];
+  const step = (2 * beat) / (run.length + 1), line = run.map((nm, i) => [at(6) + i * step, nm, step * 0.95]);
+  line.push([BLOOM, "C#6", 0.85], [BLOOM + 0.96, "B5", 0.2], [BLOOM + 1.2, "A5", 1.1]);
+  const ld = lead(line.map(([t, nm, len]) => [t - at(6), nm, len]), BLOOM + 2.6 - at(6), {cut: 2800});
+  const ldst = chorus({L: ld, R: ld.slice()}, {mix: 0.6, depth: 0.003});
+  placeSt(tr, ldst, at(6), 0.3, 0.45);
+  echoed(tr, celesta(hz("E6"), 2, {decay: 0.9}), BLOOM + 0.02, 0.1, 0.3, 0.7, 2);
+  // the bloom: a soft swell of air, the sub landing on A
+  place(tr, biquad(noise(2, "pink", 91, t => smooth(t / 0.2) * Math.exp(-t / 0.6)), "bp", 5200, 0.6), BLOOM, 0.14, 0, 0.9);
+  place(tr, glide(hz("E1"), hz("A1"), 2.6, {attack: 0.02, release: 2, h2: 0.25}), BLOOM, 0.34, 0, 0.1);
+  return finish(tr, -5, {wet: 0.3});
+}
+
 // ---------------------------------------------------------------- ships, signals, sky
 function arrive() {   // a session comes alongside: a soft whoosh, a warm swell, the cell's first two notes
   const tr = track(4.5);
@@ -405,6 +514,7 @@ const MOTIFS = [
   ["theme", "Theme", "The way in: boot", "At login, with the intro. Closest to the Windows 95 startup's shape: a sparkle, a warm chord swelling in, the cell as a chime melody, a lift, a bloom that rings out.", () => theme("boot")],
   ["theme-disco", "Theme", "The way in: disco", "The same skeleton, leaning Interstella 5555: a resonant filter sweep opening through the zoom, an \"ooh\" pad, and a soft four-on-the-floor heartbeat that lands on the bloom.", () => theme("disco")],
   ["theme-funk", "Theme", "The way in: funk", "The same skeleton, leaning Jamiroquai: Rhodes chops on the off-beats, a walking bass, and disco strings rising into the bloom.", () => theme("funk")],
+  ["theme-digital", "Theme", "The way in: digital", "An homage to Daft Punk's Digital Love, in sound and feel: a filtered disco loop at 125 BPM, Wurlitzer chords in swung eighths, an \"ooh\" pad pumping against the kick, claps, an octave bass, and a bright round run climbing into the bloom as the filter opens.", themeDigital],
   ["arrive", "Ships", "Comes alongside", "A Claude Code session starts.", arrive],
   ["needs-you", "Ships", "Needs you", "A session is waiting on a permission prompt or a question.", needsYou],
   ["done", "Ships", "Holding", "A session finishes its turn: your move.", done],

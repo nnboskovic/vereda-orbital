@@ -4,7 +4,7 @@ import QtQuick
 
 // The Orbital's sounds (sound/out/*.wav, rendered by sound/render.js), played through PipeWire.
 // Settings are in ~/.config/vereda-orbital/sound.json, which orbital-sound edits: on, volume,
-// song (funk, boot, disco or shuffle) and a switch per group (theme, ships, signals, sky).
+// song (funk, boot, disco, digital or shuffle) and a switch per group (theme, ships, signals, sky).
 // Ships and signals stay quiet while notifications are silenced (Do Not Disturb).
 Item {
   id: snd
@@ -16,7 +16,7 @@ Item {
   property var lastAt: ({})
   property int next: 0
   readonly property var groups: ({
-    "theme": "theme", "theme-disco": "theme", "theme-funk": "theme",
+    "theme": "theme", "theme-disco": "theme", "theme-funk": "theme", "theme-digital": "theme",
     "arrive": "ships", "needs-you": "ships", "done": "ships", "depart": "ships",
     "swept": "signals", "tight-point": "signals", "broadcast": "signals",
     "thunder": "sky"
@@ -24,10 +24,10 @@ Item {
 
   function setting(key, fallback) { return settings && settings[key] !== undefined ? settings[key] : fallback }
 
-  // The intro's song: the chosen one, or any of the three on shuffle.
+  // The intro's song: the chosen one, or any of the four on shuffle.
   function songId() {
     var s = String(setting("song", "funk"))
-    if (s === "shuffle") s = ["boot", "disco", "funk"][Math.floor(Math.random() * 3)]
+    if (s === "shuffle") s = ["boot", "disco", "funk", "digital"][Math.floor(Math.random() * 4)]
     return s === "boot" ? "theme" : "theme-" + s
   }
 

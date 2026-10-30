@@ -143,7 +143,9 @@ one cell shaped like the mark, E5 down to A4 up to B5.
 
 - **The way in**: the intro's song, following the Windows 95 startup's shape (a sparkle, a
   warm chord, the cell as a chime melody, a lift, a bloom as the ivory dissolves) over
-  Dmaj9, E9sus, Amaj9. Three flavours: funk (default), boot, disco, or shuffle.
+  Dmaj9, E9sus, Amaj9. Flavours: funk (default), boot, disco, and digital (an homage to Daft
+  Punk's Digital Love in sound and feel: a filtered disco loop at 125 BPM opening through the
+  zoom), or shuffle.
 - **Ships**: a session comes alongside, needs you, finishes its turn, leaves.
 - **Signals**: each notification by urgency (swept, tight point, broadcast).
 - **Sky**: thunder a second or few after each lightning strike.
@@ -151,7 +153,7 @@ one cell shaped like the mark, E5 down to A4 up to B5.
 `OrbitalSound.qml` plays them through PipeWire; ships and signals keep quiet under Do Not
 Disturb. `orbital-sound` sets them up:
 
-    orbital-sound song funk|boot|disco|shuffle
+    orbital-sound song funk|boot|disco|digital|shuffle
     orbital-sound on|off [theme|ships|signals|sky]
     orbital-sound volume 0.6
     orbital-sound play needs-you

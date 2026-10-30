@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The Orbital's sounds: pick the intro song, switch them on or off, set the volume, listen.
-#   orbital-sound song funk|boot|disco|shuffle
+#   orbital-sound song funk|boot|disco|digital|shuffle
 #   orbital-sound on|off [theme|ships|signals|sky]
 #   orbital-sound volume 0.6
 #   orbital-sound play <id>       e.g. theme-funk, needs-you, tight-point, thunder
@@ -20,7 +20,7 @@ set_key() { # key, jq value
 
 case "${1:-status}" in
   song)
-    [[ ${2:-} =~ ^(funk|boot|disco|shuffle)$ ]] || { echo "songs: funk boot disco shuffle" >&2; exit 1; }
+    [[ ${2:-} =~ ^(funk|boot|disco|digital|shuffle)$ ]] || { echo "songs: funk boot disco digital shuffle" >&2; exit 1; }
     set_key song "\"$2\""
     echo "intro song: $2"
     ;;
