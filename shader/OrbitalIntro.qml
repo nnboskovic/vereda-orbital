@@ -8,7 +8,7 @@ import "Scene.js" as Scene
 // down into the Orbital, its long stroke landing along the band toward the ribbon and then
 // spreading over the band's whole visible arc, edge to edge (all projected through the
 // scene's own camera, so it lies exactly on the band). Its ivory fades into the Orbital
-// beneath, and the dark falls away around it. About six seconds.
+// beneath, and the dark falls away around it. About eight seconds.
 Item {
   id: intro
 
@@ -30,7 +30,7 @@ Item {
   visible: false
 
   property var setup: null
-  property real k: 0                    // the mark's journey: flight and landing to 0.6, then the spread
+  property real k: 0                    // the mark's journey: flight and landing to 0.5, then the stretch
   property real fill: 1                 // the long stroke's ivory, fading to a window onto the Orbital
   property real shortStroke: 1
   property real nameShown: 0
@@ -103,16 +103,15 @@ Item {
     PauseAnimation { duration: 800 }
     ParallelAnimation {
       NumberAnimation { target: intro; property: "nameShown"; to: 0; duration: 400; easing.type: Easing.InQuad }
-      NumberAnimation { target: intro; property: "k"; to: 1; duration: 3800 }
+      NumberAnimation { target: intro; property: "k"; to: 1; duration: 4600 }
       SequentialAnimation {
         PauseAnimation { duration: 1700 }
         NumberAnimation { target: intro; property: "shortStroke"; to: 0; duration: 600; easing.type: Easing.InQuad }
       }
-      SequentialAnimation {
-        PauseAnimation { duration: 3200 }
-        NumberAnimation { target: intro; property: "fill"; to: 0; duration: 1100; easing.type: Easing.InOutQuad }
-      }
     }
+    // the whole arc in ivory for a beat, then it fades into the Orbital and the dark falls away
+    PauseAnimation { duration: 350 }
+    NumberAnimation { target: intro; property: "fill"; to: 0; duration: 1300; easing.type: Easing.InOutQuad }
     NumberAnimation { target: intro; property: "veil"; to: 0; duration: 800; easing.type: Easing.InOutQuad }
     ScriptAction { script: intro.visible = false }
   }

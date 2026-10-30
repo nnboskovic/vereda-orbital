@@ -119,7 +119,7 @@ Manual*, the studio's own) names it for the pieces below.
 
 At login the Vereda Labs mark sits centred on black and names the ship, then turns
 in space and flies down into the Orbital: its long stroke lands along the band toward
-the ribbon, spreads over the band's whole visible arc, edge to edge, and its ivory
+the ribbon, stretches all the way down the band and fills its whole visible arc, edge to edge, holds, and its ivory
 fades into the Orbital beneath while the dark falls away (`OrbitalIntro.qml`, about
 six seconds). The move is real 3D, projected through the scene's own camera
 (`Scene.introSetup` and `Scene.introOutline`), so the stroke lies exactly on the band.
