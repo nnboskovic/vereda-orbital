@@ -95,6 +95,40 @@ over the band, along its shower's direction, bright over the night side and fain
 by day. Preview a peak with `omarchy-shell orbital meteors geminids` (`''` goes
 back); `omarchy-shell orbital status` lists tonight's showers and rate.
 
+## The ship, its drone and its signals
+
+This machine is a ship too: `"ship"` in `look.json` (GCU *Still Reading The
+Manual*, the studio's own) names it for the pieces below.
+
+- **The drone** (`drone/`, the `vereda.drone` bar widget): a small casing in an
+  aura field that shows the sessions' mood, as Culture drones do: quiet grey-blue
+  with nothing alongside, calm blue with sessions holding, a slow cyan breath while
+  any are underway, an amber pulse when one needs you, a green flash as one
+  finishes its turn. Hover lists the sessions as ships; a click jumps to the
+  terminal of the one that needs you (`presence.sh focus`). It breathes at about
+  12 frames a second, not the display's rate.
+- **The ship's field**: while the theme is on, the drone tints the active window's
+  border amber whenever a session needs you, and puts the theme's colours back after.
+- **Signal traffic**: `notifications/patch.py` patches a clone of Omarchy's
+  notifications so each arrives as in *Excession*: a transmission line (tight point,
+  M16 for normal; broadcast, M32 for critical; swept, M4 for low), then `x` the sender
+  (a ship named for the app, or the Hub for Omarchy's own) and `o` this machine's ship,
+  the text in Manrope. Re-running it on a fresh clone patches it again.
+
+## The way in
+
+At login the Vereda Labs mark sits centred on black, names the ship, then its long
+stroke stretches and turns to lie along the band, becomes a window onto the
+Orbital and opens out to the whole screen (`OrbitalIntro.qml`, about four seconds).
+It plays when the shell starts within 90 s of Hyprland (whose instance signature
+carries its start time), so restarting the shell later does not replay it;
+`omarchy-shell orbital intro` does.
+
+The theme's `unlock.png` is the same mark at the size the intro starts from, so the
+boot screen leads straight into it. Applying it to the boot screen needs root, so it
+is yours to run: `omarchy plymouth set by theme vereda-orbital`
+(`omarchy plymouth reset` undoes it).
+
 ## Changing the look
 
 Edit `theme/look.json` (camera, sun, clouds, colours; every key is described in

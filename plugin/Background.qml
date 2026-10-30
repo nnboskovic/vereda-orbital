@@ -51,6 +51,17 @@ Item {
   }
   property var orbitalMeteorPreview: null
 
+  // The login intro: the Vereda Labs mark opening into the Orbital. It plays when the shell
+  // starts within a minute and a half of Hyprland (its instance signature carries its start
+  // time), so a shell restart later does not replay it; omarchy-shell orbital intro replays it.
+  readonly property bool orbitalFreshLogin: {
+    var parts = String(Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || "").split("_")
+    var started = parts.length > 1 ? parseInt(parts[1]) : NaN
+    return !isNaN(started) && Date.now() / 1000 - started < 90
+  }
+  property int orbitalIntroRequests: 0
+  FontLoader { id: orbitalFont; source: "Manrope-latin.woff2" }
+
   // The lock screen blurs the background image file, so every ten minutes the Orbital as it
   // is now (hour and weather) replaces it; the image is also what shows at startup.
   property real orbitalSnapshotAt: 0
@@ -75,6 +86,8 @@ Item {
       try { root.orbitalWeatherPreview = json ? JSON.parse(json) : null }
       catch (e) { console.warn("orbital weather preview: " + e) }
     }
+
+    function intro(): void { root.orbitalIntroRequests++ }
 
     // omarchy-shell orbital meteors geminids previews a shower at its peak; '' goes back to tonight.
     function meteors(name: string): void {
@@ -418,6 +431,23 @@ Item {
           if (mouse.button === Qt.RightButton) root.openThemeSwitcher()
           else root.openSelector()
           mouse.accepted = true
+        }
+      }
+
+      OrbitalIntro {
+        id: orbitalIntro
+        anchors.fill: parent
+        z: 10
+        dpr: panel.devicePixelRatio || 1
+        ship: (root.orbitalParams || Scene.defaults).ship || ""
+        fontFamily: orbitalFont.name
+        // at a fresh login, cover the screen as soon as the background is known, then play
+        property bool started: false
+        readonly property bool wanted: root.orbitalFreshLogin && root.orbitalBackground && !started
+        onWantedChanged: if (wanted) { started = true; play() }
+        Connections {
+          target: root
+          function onOrbitalIntroRequestsChanged() { if (root.orbitalBackground) orbitalIntro.play() }
         }
       }
     }

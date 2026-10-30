@@ -13,12 +13,12 @@ theme="$HOME/.config/omarchy/themes/vereda-orbital"
 
 # The live background rides in Omarchy's own background plugin, cloned so updates leave it alone.
 [[ -d $plugin ]] || omarchy plugin clone omarchy.background
-cp "$kit/plugin/Background.qml" "$kit/shader/"{OrbitalLive.qml,OrbitalPainter.qml,OrbitalWeather.qml,OrbitalLightning.qml,OrbitalMeteors.qml,OrbitalLights.qml,OrbitalSessions.qml,Scene.js,orbital.frag.qsb,flash.frag.qsb,Manrope-latin.woff2} "$plugin/"
+cp "$kit/plugin/Background.qml" "$kit/shader/"{OrbitalLive.qml,OrbitalPainter.qml,OrbitalWeather.qml,OrbitalLightning.qml,OrbitalMeteors.qml,OrbitalLights.qml,OrbitalSessions.qml,OrbitalIntro.qml,Scene.js,orbital.frag.qsb,flash.frag.qsb,Manrope-latin.woff2} "$plugin/"
 
 # The theme: colours, icons, the look, and the still frame the live background starts from
 # (also what the lock screen and theme picker show). Rendered at the focused monitor's size.
 mkdir -p "$theme/backgrounds"
-cp "$kit/theme/colors.toml" "$kit/theme/icons.theme" "$theme/"
+cp "$kit/theme/colors.toml" "$kit/theme/icons.theme" "$kit/theme/unlock.png" "$theme/"
 cp "$kit/theme/look.json" "$theme/backgrounds/orbital-live.json"
 read -r width height scale < <(hyprctl monitors -j | jq -r '(map(select(.focused)) + .)[0] | "\(.width) \(.height) \(.scale)"')
 logical_w=$(awk -v w="$width" -v s="$scale" 'BEGIN { printf "%d", w / s + 0.5 }')
@@ -28,6 +28,18 @@ still=$(mktemp --suffix=.png)
 magick "$still" -alpha off "$theme/backgrounds/orbital-live.png"
 magick "$theme/backgrounds/orbital-live.png" -resize 1280x720 "$theme/preview.png"
 rm -f "$still"
+
+# The drone, a bar widget whose aura shows the sessions' mood (and tints the window border).
+drone="$HOME/.config/omarchy/plugins/vereda.drone"
+mkdir -p "$drone"
+cp "$kit/drone/"{Drone.qml,manifest.json} "$kit/shader/"{Scene.js,OrbitalSessions.qml} "$drone/"
+grep -q '"vereda.drone"' "$HOME/.config/omarchy/shell.json" 2>/dev/null || omarchy plugin enable vereda.drone --section right
+
+# Notifications as Culture signal traffic: a clone of Omarchy's notifications, patched.
+notes="$HOME/.config/omarchy/plugins/$user.notifications"
+[[ -d $notes ]] || omarchy plugin clone omarchy.notifications
+cp "$kit/shader/"{Scene.js,Manrope-latin.woff2} "$notes/"
+"$kit/notifications/patch.py" "$notes"
 
 # Session lights read the sessions Claude Code's hooks record. The hooks live in Claude Code's
 # own settings, so they are a separate step you run yourself: hooks.py add (hooks.py remove undoes it).

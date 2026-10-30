@@ -11,7 +11,9 @@ user="${USER:-$(id -un)}"
 "$kit/hooks.py" remove
 
 omarchy theme set "$(cat "$kit/.previous-theme" 2>/dev/null || echo "Tokyo Night")"
-if [[ -d $HOME/.config/omarchy/plugins/$user.background ]]; then
-  omarchy plugin remove "$user.background" --yes
-fi
+for plugin in "$user.background" "$user.notifications" vereda.drone; do
+  if [[ -d $HOME/.config/omarchy/plugins/$plugin ]]; then
+    omarchy plugin remove "$plugin" --yes
+  fi
+done
 echo "Vereda Orbital reverted."

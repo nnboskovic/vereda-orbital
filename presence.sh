@@ -3,6 +3,7 @@
 # ~/.cache/vereda-orbital/sessions.json, which the live background reads.
 #   presence.sh          the hook (reads the hook's JSON on stdin)
 #   presence.sh prune    drops sessions whose Claude Code process has gone
+#   presence.sh focus ID focuses the terminal window a session runs in
 # States: working (a prompt is being handled), waiting (blocked on a permission prompt or
 # a question), idle (turn done, your move). SessionEnd removes the session.
 set -u
@@ -25,6 +26,22 @@ dead_sessions() { # ids whose process is gone, as a JSON array
   jq -r 'to_entries[] | "\(.key) \(.value.pid // 0)"' "$file" 2>/dev/null |
     while read -r id pid; do [[ $pid -gt 1 && -d /proc/$pid ]] || echo "$id"; done | jq -R . | jq -sc .
 }
+
+if [[ ${1:-} == focus ]]; then
+  # walk up from the session's Claude Code process to the window that owns it
+  pid=$(jq -r --arg id "${2:-}" '.[$id].pid // empty' "$file" 2>/dev/null)
+  [[ -n $pid ]] || exit 0
+  owners=$(hyprctl clients -j | jq -r '.[].pid')
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    if grep -qx "$pid" <<<"$owners"; then
+      hyprctl dispatch "hl.dsp.focus({ window = \"pid:$pid\" })" >/dev/null
+      exit 0
+    fi
+    pid=$(awk '{print $4}' /proc/$pid/stat 2>/dev/null)
+    [[ -n $pid && $pid -gt 1 ]] || exit 0
+  done
+  exit 0
+fi
 
 if [[ ${1:-} == prune ]]; then
   update --argjson dead "$(dead_sessions)" 'delpaths([$dead[] | [.]])'

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "vereda.drone",
+  "name": "Drone",
+  "version": "1.0.0",
+  "author": "Vereda Labs",
+  "description": "A Culture drone whose aura shows the mood of your Claude Code sessions",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Drone.qml"
+  },
+  "barWidget": {
+    "displayName": "Drone",
+    "description": "A Culture drone whose aura shows the mood of your Claude Code sessions",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

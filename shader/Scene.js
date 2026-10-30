@@ -34,6 +34,7 @@ var defaults = {
   cloudColor: [0.86, 0.92, 0.98],
   width: 2600,     // band width, km (the painting cheats it wide)
   weather: true,   // real local weather changes the clouds, haze and wind (see weatherLook)
+  ship: "GCU Still Reading The Manual",  // this machine's own ship name (notifications, the drone)
   sway: 0.6,       // slow look-around over ~26 min, degrees
   speed: 1.0       // scene seconds per real second
 };

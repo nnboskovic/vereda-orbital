@@ -43,6 +43,7 @@
   ],
   "width": 2600,
   "weather": true,
+  "ship": "GCU Still Reading The Manual",
   "sway": 0.6,
   "speed": 1
 }
