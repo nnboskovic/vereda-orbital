@@ -369,3 +369,45 @@ function introOutline(s, poly, k, spread) {
   }
   return out;
 }
+
+// The intro as a zoom: precomputes, in screen space, where each outline point starts (the
+// mark, flat before the camera) and ends (the band's whole visible arc), around the mark's
+// centre and the band's visual centre, and the overall turn between them.
+function introZoom(s) {
+  var longA = introOutline(s, markLong, 0, false), longB = introOutline(s, markLong, 1, true);
+  var shortA = introOutline(s, markShort, 0, false);
+  var centroid = function (pts) { var x = 0, y = 0; pts.forEach(function (q) { x += q[0]; y += q[1] }); return [x / pts.length, y / pts.length]; };
+  // the band's centre as it sits on screen
+  var bx = 0, by = 0, nb = 0;
+  for (var gx = 0; gx <= 48; gx++) for (var gy = 0; gy <= 27; gy++) {
+    if (!skyPoint(s.v, s.edge ? Math.abs(s.edge) * 2 - 40 : 2600, gx / 24 - 1, gy / 13.5 - 1, s.aspect, 10)) continue;
+    bx += (gx / 48) * s.w; by += (1 - gy / 27) * s.h; nb++;
+  }
+  // the turn, from the stroke's axis as drawn to the band's: mid near end to mid far end
+  var n = longA.length / 4, axis = function (pts) {
+    var a = pts[3 * n + Math.floor(n / 2)], b = pts[n + Math.floor(n / 2)];
+    return Math.atan2(b[1] - a[1], b[0] - a[0]);
+  };
+  var len = function (pts) { var a = pts[3 * n + Math.floor(n / 2)], b = pts[n + Math.floor(n / 2)]; return Math.sqrt(Math.pow(b[0] - a[0], 2) + Math.pow(b[1] - a[1], 2)); };
+  var turn = axis(longB) - axis(longA);
+  return {longA: longA, longB: longB, shortA: shortA, cA: centroid(longA), cB: nb ? [bx / nb, by / nb] : [s.w / 2, s.h / 2],
+          turn: Math.atan2(Math.sin(turn), Math.cos(turn)), zoom: len(longB) / len(longA)};
+}
+
+// Points at progress k (0..1). The stroke zooms as one rigid shape, scaling up around a
+// centre that slides from the mark's to the band's and turning to the band's angle, so both
+// ends reach outward together; through the second half its outline eases into the band's
+// exact arc. The short stroke only rides along (and fades).
+function introZoomAt(z, which, k) {
+  var e = k * k * k * (k * (k * 6 - 15) + 10);
+  var rot = z.turn * e, zoom = Math.pow(z.zoom, e), co = Math.cos(rot), si = Math.sin(rot);
+  var cx = z.cA[0] + (z.cB[0] - z.cA[0]) * e, cy = z.cA[1] + (z.cB[1] - z.cA[1]) * e;
+  var A = which === "short" ? z.shortA : z.longA, m = which === "short" ? 0 : smooth01((e - 0.3) / 0.7), out = [];
+  for (var i = 0; i < A.length; i++) {
+    var ax = (A[i][0] - z.cA[0]) * zoom, ay = (A[i][1] - z.cA[1]) * zoom;
+    var x = cx + ax * co - ay * si, y = cy + ax * si + ay * co;
+    if (m > 0) { x += (z.longB[i][0] - x) * m; y += (z.longB[i][1] - y) * m; }
+    out.push([x, y]);
+  }
+  return out;
+}

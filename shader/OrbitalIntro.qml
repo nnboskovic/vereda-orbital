@@ -20,8 +20,9 @@ Item {
 
   function play() {
     var p = Scene.merge(params, {introX: 0.35, introY: 0.45, introLength: 10000})
-    setup = Scene.introSetup(p, Scene.frame(p, 0, Scene.clockHour()), width, height, markPixels / dpr)
-    if (!setup) return
+    var s = Scene.introSetup(p, Scene.frame(p, 0, Scene.clockHour()), width, height, markPixels / dpr)
+    if (!s) return
+    setup = Scene.introZoom(s)
     visible = true
     run.restart()
   }
@@ -38,12 +39,12 @@ Item {
   readonly property real fill: 1 - smooth((k - 0.4) / 0.55)
   readonly property real veil: 1 - smooth((k - 0.72) / 0.28)
 
-  function outline(poly, spread) {
+  function outline(which) {
     if (!setup) return []
-    return Scene.introOutline(setup, poly, k, spread).map(function (q) { return Qt.point(q[0], q[1]) })
+    return Scene.introZoomAt(setup, which, k).map(function (q) { return Qt.point(q[0], q[1]) })
   }
-  readonly property var longPath: outline(Scene.markLong, true)
-  readonly property var shortPath: outline(Scene.markShort, false)
+  readonly property var longPath: outline("long")
+  readonly property var shortPath: outline("short")
 
   // The dark, with the long stroke cut out of it exactly (the screen and the stroke filled
   // even-odd), so the window onto the Orbital and the ivory share one edge.
