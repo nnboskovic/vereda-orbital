@@ -23,6 +23,7 @@ Item {
     var s = Scene.introSetup(p, Scene.frame(p, 0, Scene.clockHour()), width, height, markPixels / dpr)
     if (!s) return
     setup = Scene.introRibbon3(s, markPixels / dpr)
+    fadeFrom = Scene.introCoverAt(setup, 0.7)
     visible = true
     run.restart()
   }
@@ -33,11 +34,13 @@ Item {
   property real k: 0                    // the mark's journey, one smooth move from the screen to the arc
   property real nameShown: 0
   function smooth(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x) }
-  // All tied to the one move: the short stroke goes early, the long one's ivory thins into
-  // the Orbital as it stretches over it, and the dark lifts as it arrives.
+  // All tied to the one move: the short stroke goes early; the long one's ivory only starts
+  // thinning into the Orbital once it covers most of the band (fadeFrom: where it first covers
+  // 70% of it, measured as the intro starts), and the dark lifts as it settles.
+  property real fadeFrom: 0.73
   readonly property real shortStroke: 1 - smooth((k - 0.05) / 0.35)
-  readonly property real fill: 1 - smooth((k - 0.4) / 0.55)
-  readonly property real veil: 1 - smooth((k - 0.72) / 0.28)
+  readonly property real fill: 1 - smooth((k - fadeFrom) / (1 - fadeFrom))
+  readonly property real veil: 1 - smooth((k - fadeFrom - 0.08) / (0.92 - fadeFrom))
 
   function points(list) { return list.map(function (q) { return Qt.point(q[0], q[1]) }) }
   readonly property var longPath: setup ? points(Scene.introRibbon3At(setup, k)) : []
@@ -93,7 +96,7 @@ Item {
     PauseAnimation { duration: 700 }
     ParallelAnimation {
       NumberAnimation { target: intro; property: "nameShown"; to: 0; duration: 450; easing.type: Easing.InQuad }
-      NumberAnimation { target: intro; property: "k"; to: 1; duration: 4400 }
+      NumberAnimation { target: intro; property: "k"; to: 1; duration: 5200 }
     }
     ScriptAction { script: intro.visible = false }
   }

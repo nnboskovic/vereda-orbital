@@ -564,3 +564,24 @@ function introShort3At(z, k) {
   }
   return out;
 }
+
+// The progress at which the long stroke first covers a share of the band on screen (0..1),
+// so the intro's fade can wait until the stroke really covers the Orbital.
+function introCoverAt(z, share) {
+  var v = z.v, s = z.s, band = [];
+  for (var x = 0; x <= s.w; x += 32) for (var y = 0; y <= s.h; y += 32)
+    if (skyPoint(v, Math.abs(s.edge) * 2 - 40, x / s.w * 2 - 1, 1 - y / s.h * 2, s.aspect, 10)) band.push([x, y]);
+  if (!band.length) return 0.7;
+  var inside = function (poly, x, y) {
+    var c = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++)
+      if ((poly[i][1] > y) !== (poly[j][1] > y) && x < (poly[j][0] - poly[i][0]) * (y - poly[i][1]) / (poly[j][1] - poly[i][1]) + poly[i][0]) c = !c;
+    return c;
+  };
+  for (var k = 0.3; k < 1; k += 0.01) {
+    var poly = introRibbon3At(z, k), n = 0;
+    for (var b = 0; b < band.length; b++) if (inside(poly, band[b][0], band[b][1])) n++;
+    if (n / band.length >= share) return k;
+  }
+  return 0.9;
+}

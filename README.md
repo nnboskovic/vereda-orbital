@@ -120,7 +120,7 @@ Manual*, the studio's own) names it for the pieces below.
 At login the Vereda Labs mark sits centred on black and names the ship, then zooms into
 the Orbital in one smooth 3D move: its long stroke, a strip in space, grows in place while
 it turns and tilts toward the band, both ends reaching outward together, and bends onto the
-ring until it is the band's whole visible arc, edge to edge. Its ivory thins into the
+ring until it is the band's whole visible arc, edge to edge. Once it covers most of the band (70%, measured as the intro starts) its ivory thins into the
 Orbital beneath as it goes and the dark lifts around it (`OrbitalIntro.qml`, about six
 seconds). Every frame is projected through the scene's own camera (`Scene.introRibbon3`),
 so the near end widens because it really comes toward you, and the strip ends exactly on

@@ -20,7 +20,7 @@ ShellRoot {
       Image { anchors.fill: parent; source: "file://" + Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/backgrounds/orbital-live.png"; cache: false }
       OrbitalIntro { id: intro; anchors.fill: parent; dpr: win.devicePixelRatio || 1.5; params: Scene.merge(Scene.defaults, {hour: 0.5}); ship: Scene.defaults.ship; fontFamily: manrope.name }
     }
-    property var times: [1200, 2200, 2800, 3300, 3800, 4300, 4800, 5300, 5800, 6400]
+    property var times: [1500, 3400, 4300, 4700, 5100, 5500, 5800, 6100, 6500, 7000]
     property int k: 0
     property real t0: 0
     Timer { interval: 600; running: true; onTriggered: { win.t0 = Date.now(); intro.play(); shot.interval = win.times[0]; shot.start() } }
