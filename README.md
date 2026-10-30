@@ -121,7 +121,7 @@ At login the Vereda Labs mark sits centred on black and names the ship, then tur
 in space and flies down into the Orbital: its long stroke lands along the band toward
 the ribbon, stretches all the way down the band and fills its whole visible arc, edge to edge, holds, and its ivory
 fades into the Orbital beneath while the dark falls away (`OrbitalIntro.qml`, about
-six seconds). The move is real 3D, projected through the scene's own camera
+eight seconds). The move is real 3D, projected through the scene's own camera
 (`Scene.introSetup` and `Scene.introOutline`), so the stroke lies exactly on the band.
 It plays when the shell starts within 90 s of Hyprland (whose instance signature
 carries its start time), so restarting the shell later does not replay it;
