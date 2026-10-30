@@ -411,3 +411,156 @@ function introZoomAt(z, which, k) {
   }
   return out;
 }
+
+// The intro as a ribbon: the long stroke as a spine (its centre line) with a half-width
+// either side. At the start the spine is the stroke's straight axis and the width nearly
+// even; at the end it is the band's centre line as the camera sees it, wide near and narrow
+// toward the ribbon. In between the ribbon zooms and turns as one piece, its ends heading
+// straight for the band's ends, while the spine bends into the band's curve and the width
+// eases into its taper, so every frame is a smooth ribbon. Screen space, logical px.
+function introRibbon(s, markPx, samples) {
+  var N = samples || 48, px = markPx / 178, cx = s.w / 2, cy = s.h / 2;
+  var mark = function (u, v) { return [cx + u * px, cy - v * px]; };
+  var A = [], L0 = [], R0 = [], B = [], L1 = [], R1 = [];
+  for (var i = 0; i <= N; i++) {
+    var f = i / N;
+    // the stroke: bottom edge from (-43,-58) to (7,-58), top edge from (43,58) to (89,58)
+    var bl = [-43 + 86 * f, -58 + 116 * f], br = [7 + 82 * f, -58 + 116 * f], mid = [(bl[0] + br[0]) / 2, (bl[1] + br[1]) / 2];
+    var m = mark(mid[0], mid[1]), l = mark(bl[0], bl[1]), r = mark(br[0], br[1]);
+    A.push(m); L0.push([l[0] - m[0], l[1] - m[1]]); R0.push([r[0] - m[0], r[1] - m[1]]);
+    // the band at the same share of its visible arc
+    var ph = s.near + (s.far - s.near) * f;
+    var c = project(s.v, ringPt(ph, s.alt, 0), s.aspect), e1 = project(s.v, ringPt(ph, s.alt, s.edge), s.aspect), e2 = project(s.v, ringPt(ph, s.alt, -s.edge), s.aspect);
+    var sc = [(c[0] + 1) / 2 * s.w, (1 - c[1]) / 2 * s.h], s1 = [(e1[0] + 1) / 2 * s.w, (1 - e1[1]) / 2 * s.h], s2 = [(e2[0] + 1) / 2 * s.w, (1 - e2[1]) / 2 * s.h];
+    B.push(sc); L1.push([s1[0] - sc[0], s1[1] - sc[1]]); R1.push([s2[0] - sc[0], s2[1] - sc[1]]);
+  }
+  // keep the stroke's left side on the band's same side, so the ribbon never twists
+  var cr = function (d, o) { return d[0] * o[1] - d[1] * o[0]; }, h = Math.floor(N / 2);
+  var dA = [A[N][0] - A[0][0], A[N][1] - A[0][1]], dB = [B[h + 1][0] - B[h - 1][0], B[h + 1][1] - B[h - 1][1]];
+  if ((cr(dA, L0[h]) > 0) !== (cr(dB, L1[h]) > 0)) { var t = L1; L1 = R1; R1 = t; }
+  // the one-piece zoom: carries the stroke's ends onto the band's ends
+  var ca = [A[N][0] - A[0][0], A[N][1] - A[0][1]], cb = [B[N][0] - B[0][0], B[N][1] - B[0][1]];
+  var turn = Math.atan2(cb[1], cb[0]) - Math.atan2(ca[1], ca[0]);
+  return {N: N, A: A, L0: L0, R0: R0, B: B, L1: L1, R1: R1, turn: Math.atan2(Math.sin(turn), Math.cos(turn)),
+          zoom: Math.sqrt(cb[0] * cb[0] + cb[1] * cb[1]) / Math.sqrt(ca[0] * ca[0] + ca[1] * ca[1]),
+          midA: [(A[0][0] + A[N][0]) / 2, (A[0][1] + A[N][1]) / 2], midB: [(B[0][0] + B[N][0]) / 2, (B[0][1] + B[N][1]) / 2]};
+}
+
+// The ribbon's outline at progress k (0..1): its left side out, its right side back. Two
+// motions at once: the whole ribbon zooms and turns as one piece (which alone carries its ends
+// onto the band's ends), while in its own frame, scaled back by that zoom, its spine bends into
+// the band's curve and its half-widths ease (on a log scale) into the band's taper. So the
+// bend and the widening grow with the zoom instead of flaring ahead of it.
+function introRibbonAt(z, k) {
+  var e = k * k * k * (k * (k * 6 - 15) + 10), w = e;
+  var rot = z.turn * e, zoom = Math.pow(z.zoom, e), co = Math.cos(rot), si = Math.sin(rot);
+  var mx = z.midA[0] + (z.midB[0] - z.midA[0]) * e, my = z.midA[1] + (z.midB[1] - z.midA[1]) * e;
+  var c1 = Math.cos(-z.turn), s1 = Math.sin(-z.turn);
+  var back = function (v) { return [(v[0] * c1 - v[1] * s1) / z.zoom, (v[0] * s1 + v[1] * c1) / z.zoom]; };   // end frame -> stroke frame
+  var place = function (v) { return [(v[0] * co - v[1] * si) * zoom, (v[0] * si + v[1] * co) * zoom]; };     // stroke frame -> screen now
+  var blendWidth = function (a, b) {
+    var ra = Math.max(1e-3, Math.sqrt(a[0] * a[0] + a[1] * a[1])), rb = Math.max(1e-3, Math.sqrt(b[0] * b[0] + b[1] * b[1]));
+    var ta = Math.atan2(a[1], a[0]), d = Math.atan2(b[1], b[0]) - ta;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    var r = ra * Math.pow(rb / ra, w), t = ta + d * w;
+    return [r * Math.cos(t), r * Math.sin(t)];
+  };
+  var left = [], right = [];
+  for (var i = 0; i <= z.N; i++) {
+    var a = [z.A[i][0] - z.midA[0], z.A[i][1] - z.midA[1]], b = back([z.B[i][0] - z.midB[0], z.B[i][1] - z.midB[1]]);
+    var sp = place([a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w]);
+    var l = place(blendWidth(z.L0[i], back(z.L1[i]))), r = place(blendWidth(z.R0[i], back(z.R1[i])));
+    left.push([mx + sp[0] + l[0], my + sp[1] + l[1]]);
+    right.push([mx + sp[0] + r[0], my + sp[1] + r[1]]);
+  }
+  return left.concat(right.reverse());
+}
+
+// The intro as a 3D ribbon. The long stroke is a strip with a spine (its centre line) and a
+// half-width either side; at the start it floats flat before the camera at the boot logo's
+// size, at the end it is the band's centre strip on the ring, the band's full width. Between,
+// the strip moves as one piece in space (turning, growing and travelling so its ends head for
+// the band's two ends) while, in its own frame, it bends onto the ring's curve and its width
+// eases to the band's. Every frame is projected through the scene's camera, so the near end
+// widens because it really comes toward you, as a card does when it tilts.
+function introRibbon3(s, markPx, samples) {
+  var N = samples || 48, v = s.v, px = markPx / 178;
+  var D = 300, unit0 = px * D / (v.F * s.h / 2);
+  var C0 = add(v.cam, mul(v.fwd, D));
+  var markW = function (u, w) { return add(C0, mul(add(mul(v.right, u), mul(v.up, w)), unit0)); };
+  // the stroke's own frame: spine from bottom mid (-18,-58) to top mid (66,58), centred at (24,0)
+  var ax = [84 / 143.2, 116 / 143.2], pr = [-ax[1], ax[0]];
+  var X0 = norm(add(mul(v.right, ax[0]), mul(v.up, ax[1]))), Y0 = norm(add(mul(v.right, pr[0]), mul(v.up, pr[1]))), N0 = cross(X0, Y0);
+  var M0 = markW(24, 0);
+  // the band's centre strip, its spine at z = 0 from the near cut to the far one, anchored at
+  // the point of the band nearest the screen's centre (where the mark starts), so the stroke
+  // zooms in place and its two halves reach down the near band and up the ribbon together
+  var toPx = function (p) { var q = project(v, p, s.aspect); return q ? [(q[0] + 1) / 2 * s.w, (1 - q[1]) / 2 * s.h] : null; };
+  var mid = s.near, best = 1e18;
+  for (var ph = s.near; ph <= s.far; ph += 0.002) {
+    var q = toPx(ringPt(ph, s.alt, 0));
+    if (!q) continue;
+    var d2 = Math.pow(q[0] - s.w / 2, 2) + Math.pow(q[1] - s.h / 2, 2);
+    if (d2 < best) { best = d2; mid = ph; }
+  }
+  var phiAt = function (f) { return f < 0.5 ? s.near + (mid - s.near) * f / 0.5 : mid + (s.far - mid) * (f - 0.5) / 0.5; };
+  var spineW = function (f) { return ringPt(phiAt(f), s.alt, 0); };
+  var M1 = spineW(0.5), X1 = tanAt(mid), Y1 = null, N1 = null;
+  for (var sg = 1; sg >= -1; sg -= 2) {
+    var zz = [0, 0, sg], y = norm(sub(zz, mul(X1, dot(zz, X1)))), n = cross(X1, y);
+    if (dot(n, sub(v.cam, M1)) > 0) { Y1 = y; N1 = n; break; }
+  }
+  var s0 = unit0, s1 = (R - s.alt) * (s.far - s.near) / 143.2 * 0.6;
+  var local1 = function (p) { var d = sub(p, M1); return [dot(d, X1) / s1, dot(d, Y1) / s1, dot(d, N1) / s1]; };
+  var edgeW = Math.abs(s.edge) * (dot(Y1, [0, 0, 1]) > 0 ? 1 : -1);   // the band edge on the stroke's left
+  var spine0 = [], left0 = [], right0 = [], spine1 = [], left1 = [], right1 = [];
+  for (var i = 0; i <= N; i++) {
+    var f = i / N, along = -71.6 + 143.2 * f;
+    // the stroke's sides are horizontal cuts in the mark, so its half-widths lean off the spine
+    // (a horizontal half-width hw in the mark, in the stroke's frame: along its axis and across it)
+    var hw = 25 - 2 * f;
+    spine0.push([along, 0, 0]);
+    left0.push([-hw * ax[0], -hw * pr[0], 0]);
+    right0.push([hw * ax[0], hw * pr[0], 0]);
+    var ph = phiAt(f), c = ringPt(ph, s.alt, 0), cl = local1(c);
+    spine1.push(cl);
+    var el = local1(ringPt(ph, s.alt, edgeW)), er = local1(ringPt(ph, s.alt, -edgeW));
+    left1.push(sub(el, cl)); right1.push(sub(er, cl));
+  }
+  var dir0 = sub(M0, v.cam), dir1 = sub(M1, v.cam), d0 = Math.sqrt(dot(dir0, dir0)), d1 = Math.sqrt(dot(dir1, dir1));
+  // the short stroke, in the same frame, rides along unbent
+  var shortLocal = markShort.map(function (m) { var d = [m[0] - 24, m[1]]; return [d[0] * ax[0] + d[1] * ax[1], d[0] * pr[0] + d[1] * pr[1], 0]; });
+  return {v: v, s: s, N: N, s0: s0, s1: s1, q0: quatFromBasis(X0, Y0, N0), q1: quatFromBasis(X1, Y1, N1), shortLocal: shortLocal,
+          dir0: mul(dir0, 1 / d0), dir1: mul(dir1, 1 / d1), d0: d0, d1: d1,
+          spine0: spine0, left0: left0, right0: right0, spine1: spine1, left1: left1, right1: right1};
+}
+
+function introRibbon3At(z, k) {
+  var e = k * k * k * (k * (k * 6 - 15) + 10), w = e;
+  var q = quatSlerp(z.q0, z.q1, e), ax = quatAxes(q), X = ax[0], Y = ax[1], Nn = cross(X, Y);
+  var sc = z.s0 * Math.pow(z.s1 / z.s0, e), M = add(z.v.cam, mul(slerpDir(z.dir0, z.dir1, e), z.d0 * Math.pow(z.d1 / z.d0, e)));
+  var mix = function (a, b) { return [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w]; };
+  var world = function (l) { return add(M, mul(add(add(mul(X, l[0]), mul(Y, l[1])), mul(Nn, l[2])), sc)); };
+  var toScreen = function (p) { var sp = project(z.v, p, z.s.aspect); return sp ? [(sp[0] + 1) / 2 * z.s.w, (1 - sp[1]) / 2 * z.s.h] : null; };
+  var left = [], right = [];
+  for (var i = 0; i <= z.N; i++) {
+    var sp = mix(z.spine0[i], z.spine1[i]);
+    var L = toScreen(world(add(sp, mix(z.left0[i], z.left1[i])))), Rr = toScreen(world(add(sp, mix(z.right0[i], z.right1[i]))));
+    if (L) left.push(L);
+    if (Rr) right.push(Rr);
+  }
+  return left.concat(right.reverse());
+}
+
+// The short stroke at progress k: the same motion in space as the long one, but unbent.
+function introShort3At(z, k) {
+  var e = k * k * k * (k * (k * 6 - 15) + 10);
+  var ax = quatAxes(quatSlerp(z.q0, z.q1, e)), X = ax[0], Y = ax[1];
+  var sc = z.s0 * Math.pow(z.s1 / z.s0, e), M = add(z.v.cam, mul(slerpDir(z.dir0, z.dir1, e), z.d0 * Math.pow(z.d1 / z.d0, e)));
+  var out = [];
+  for (var i = 0; i < z.shortLocal.length; i++) {
+    var l = z.shortLocal[i], sp = project(z.v, add(M, mul(add(mul(X, l[0]), mul(Y, l[1])), sc)), z.s.aspect);
+    if (sp) out.push([(sp[0] + 1) / 2 * z.s.w, (1 - sp[1]) / 2 * z.s.h]);
+  }
+  return out;
+}
