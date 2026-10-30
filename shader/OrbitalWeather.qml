@@ -65,10 +65,25 @@ Item {
           var c = JSON.parse(text).current
           wx.conditions = {cover: c.cloud_cover, low: c.cloud_cover_low, mid: c.cloud_cover_mid, high: c.cloud_cover_high,
                            code: c.weather_code, precip: c.precipitation, wind: c.wind_speed_10m, visibility: c.visibility, at: c.time}
+          wx.share(wx.conditions)
         } catch (e) {}
       }
     }
   }
+
+  // The weather simulation (weather/sim.py) pulls workspace 1's place toward the real sky, so
+  // each reading is also left where it looks, stamped with when it was fetched.
+  readonly property string sharedPath: Quickshell.env("HOME") + "/.cache/vereda-orbital/weather/observed.json"
+  function share(c) {
+    if (shareProc.running) return
+    var o = {}
+    for (var k in c) o[k] = c[k]
+    o.fetched = new Date().toISOString()
+    shareProc.command = ["sh", "-c", 'mkdir -p "$(dirname "$2")" && printf %s "$1" > "$2.next" && mv -f "$2.next" "$2"',
+                         "sh", JSON.stringify(o), sharedPath]
+    shareProc.running = true
+  }
+  Process { id: shareProc }
 
   Timer {
     interval: wx.refreshMinutes * 60000

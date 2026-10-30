@@ -11,7 +11,7 @@ Item {
   id: studio
 
   property var params: Scene.defaults
-  property var weather: null
+  property var weatherFor: null         // place -> the real weather to apply there, or null
   property real dpr: 1
   property int tickMs: 60
   property string folder: ""            // stills are saved here as <prefix>-<place>.png
@@ -52,7 +52,7 @@ Item {
     sourceComponent: OrbitalLive {
       dpr: studio.dpr
       params: studio.lookOf(studio.current)
-      weather: studio.weather
+      weather: studio.weatherFor ? studio.weatherFor(studio.current) : null
       tickMs: studio.tickMs
       running: false
       // the frame's last slice is captured at the next render, so let that land first

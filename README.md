@@ -45,26 +45,44 @@ The theme's still (lock screen, startup) stays the afternoon look.
 
 ## Weather
 
-`OrbitalWeather` reads the current weather every 15 minutes from Open-Meteo, for
-the same place as the bar's weather (a location set in its panel, else wttr.in's
-guess from the connection). `Scene.weatherLook` turns it into the look: cloud
-cover through a curve measured on the afternoon look (40% outside covers 40% of
-the band), high cloud longer and wispier, rain greyer and darker, fog hazier,
-snow whiter, wind faster, and a full overcast exposed darker so its texture
-shows. Changes ease in over a couple of minutes. In a thunderstorm,
-`OrbitalLightning` strikes every few seconds: `flash.frag.qsb` (the same shader
-built with `-DFLASH`) lights the real cloud deck around a point on the band, in a
-small box, as added light that flickers for under half a second. `"weather": false`
-in `look.json` turns it off.
+The Orbital has its own weather. A simulation runs round the whole band in the background
+(`weather/`, the `vereda-weather` user service): a grid of 3016 x 104 cells of 25 km that
+closes on itself round the ring, at the pace of real weather. The day travelling round the ring
+heats it, land quickly and sea slowly, the shallow shelves faster than the deep basins; clouds
+form where air saturates, rain out, and build into storms over warm land and sea. An Orbital
+spins about its own axis, so the Coriolis force never turns the wind sideways along the floor:
+there are no cyclones, and the weather organises itself round the travelling heat instead, with
+sea breezes, afternoon storms, dawn fog and cloud streets lined up with the wind. Every few
+minutes it writes two maps of the band to `~/.cache/vereda-orbital/weather/` (`weather.png`:
+low cloud, high cloud, how convective, rain; `wind.png`: wind along and across, sea fog,
+thunderstorms) and a `status.json` summing up each workspace's place and listing the storms.
+The land it runs on is drawn by the shader itself (`weather/landmap.sh`), so it matches the
+drawn land exactly.
 
-Preview any weather on the desktop, and go back to the real one:
+Workspace 1's place follows the real sky: `OrbitalWeather` reads the weather where you are
+from Open-Meteo every 15 minutes (for the bar's location), leaves it in `observed.json`, and
+the simulation pulls the weather within a few hundred km of that place toward it, fading into
+its own weather further out. There, `Scene.weatherLook` also greys rainy cloud and hazes fog;
+everywhere else the simulation alone decides.
 
-    omarchy-shell orbital weather '{"cover":100,"code":95,"precip":8,"wind":40}'
+The shader draws the maps as two decks. Low cloud (2 km) takes the shape of its kind: smooth
+sheets and fog, stratocumulus as rounded cells pressed together, cumulus as popcorn in clumps,
+storm towers as great rounded heads, all frayed at the edges. High cloud (10 km) is cirrus drawn
+out along the wind, or a smooth anvil over a storm. Clouds have a thickness, so sunward faces
+catch the light and lee sides fall into shade, thin edges glow when you look toward the sun,
+and their shadows fall on the floor along the sun's direction, from the tops of storm towers.
+On a ring the sun sets for a whole column of air at once (the floor curves up, not away), so
+high cloud doesn't keep the light after the low cloud loses it, as it would on a planet.
+`OrbitalLightning` strikes inside the storm cells in view, more often the stronger and more
+numerous they are; `flash.frag.qsb` lights the cloud around each strike, and thunder follows.
+Without the simulation, a procedural sky stands in. The new clouds cost no more GPU time than
+the old single sheet did.
+
+Preview a real-weather touch at home (cloud cover itself comes from the simulation):
+
+    omarchy-shell orbital weather '{"code":95,"precip":8,"wind":40}'
     omarchy-shell orbital weather ''
     omarchy-shell orbital status
-
-or as a still: `ORBITAL_WEATHER='{"cover":95,"code":63,"precip":3}' ./render-still.sh /tmp/rain.png 1280 720`.
-Fields: `cover`/`low`/`mid`/`high` (%), `code` (WMO), `precip` (mm/h), `wind` (km/h), `visibility` (m).
 
 ## Session lights
 

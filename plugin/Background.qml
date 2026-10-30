@@ -45,6 +45,32 @@ Item {
   }
   property var orbitalWeatherPreview: null
 
+  // The weather simulation (weather/sim.py) running round the ring: its storm cells, for the
+  // lightning, and whether it's running at all (its status no older than half an hour). While
+  // it runs, the clouds everywhere come from its maps, and the real weather's other touches
+  // (greyer cloud in rain, haze in fog) belong to workspace 1's place, the one that follows
+  // the real sky.
+  property var orbitalStorms: []
+  property real orbitalSimAt: 0
+  readonly property bool orbitalSimOn: orbitalSimAt > 0 && Date.now() - orbitalSimAt < 30 * 60 * 1000
+  FileView {
+    path: root.home + "/.cache/vereda-orbital/weather/status.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try {
+        var st = JSON.parse(text())
+        root.orbitalStorms = st.storms || []
+        root.orbitalSimAt = st.at ? Date.parse(st.at) : Date.now()
+      } catch (e) {}
+    }
+  }
+  function orbitalWeatherFor(place) {
+    if (root.orbitalSimOn && place !== 1) return null
+    return root.orbitalWeatherPreview || orbitalWeather.conditions
+  }
+
   // Claude Code sessions, as moored ships; and a preview date for the meteor calendar.
   OrbitalSessions {
     id: orbitalSessions
@@ -479,7 +505,8 @@ Item {
         anchors.fill: parent
         dpr: panel.devicePixelRatio || 1
         params: Scene.atPlace(root.orbitalParams || Scene.defaults, panel.livePlace)
-        weather: root.orbitalWeatherPreview || orbitalWeather.conditions
+        weather: root.orbitalWeatherFor(panel.livePlace)
+        storms: root.orbitalStorms
         previewing: root.orbitalWeatherPreview !== null
         sessions: orbitalSessions.sessions
         meteorDate: root.orbitalMeteorPreview
@@ -560,7 +587,7 @@ Item {
         z: -1
         dpr: panel.devicePixelRatio || 1
         params: root.orbitalParams || Scene.defaults
-        weather: root.orbitalWeatherPreview || orbitalWeather.conditions
+        weatherFor: place => root.orbitalWeatherFor(place)
         tickMs: UPower.onBattery ? 120 : 60
         folder: root.orbitalPlacesDir
         prefix: panel.screen ? panel.screen.name : "screen"
@@ -621,7 +648,8 @@ Item {
               dpr: flyover.devicePixelRatio || 1
               params: Scene.atPlace(root.orbitalParams || Scene.defaults, panel.place)
               motion: (look, t) => Scene.flyoverMotion(look, t)
-              weather: root.orbitalWeatherPreview || orbitalWeather.conditions
+              weather: root.orbitalWeatherFor(panel.place)
+              storms: root.orbitalStorms
               running: true
               tickMs: UPower.onBattery ? 120 : 60
               opacity: ready ? 1 : 0.002

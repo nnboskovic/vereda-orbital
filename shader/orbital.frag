@@ -36,10 +36,20 @@ layout(std140, binding = 0) uniform buf {
   vec3 uBolt;
   float uBoltR;
   float uFlash;
+  float uMode;      // 0 draws the Orbital; 1 draws the land map the weather simulation runs on
+  float uHasSky;    // 1 once the weather simulation's maps are in uSky and uAir
 };
+
+// The weather simulation's maps (weather/sim.py): the band unrolled, 3016 x 104 cells of 25 km,
+// wrapping round the ring. uSky: low cloud, high cloud, how convective the low cloud is (flat
+// sheets at 0, towering cumulonimbus at 1), rain. uAir: the wind along and across the band (0.5
+// is calm), sea fog, thunderstorms.
+layout(binding = 1) uniform sampler2D uSky;
+layout(binding = 2) uniform sampler2D uAir;
 
 #define W uW
 const float R = 12000.0, HA = 170.0, HC = 10.0, HW = 190.0, HUB = 140.0;
+const float LOWC = 2.0, HIGHC = 10.0;   // the low and the high cloud decks, km above the floor
 const float H = 30.0, HM = 6.0, PI = 3.14159265;
 const float MIE = 2.0, SPILL = 70.0;
 const float BM = 3.0e-3 * MIE;
@@ -98,35 +108,124 @@ float ringShadow(vec3 p) {
   return smoothstep(W * 0.5 - pen, W * 0.5 + pen, abs(z));
 }
 
-// Clouds on the r=R-HC shell, in 3D noise space so there is no seam; stretched spinward.
-float clouds(vec3 q, float fp, out float depth) {
-  vec3 p = q / vec3(340.0 * uStreak, 340.0 * uStreak, 120.0 / uStreak); float t = uTime * 0.004; fp /= 160.0;
-  vec3 w = vec3(gfbm(p * 0.6 + vec3(0, 0, t), fp * 0.6, 4), gfbm(p * 0.6 + vec3(5.2, 1.3, -t), fp * 0.6, 4), 0.0) - 0.5;
-  float big = gfbm(p * 0.18 + vec3(2.0, 7.0, t * 0.3), fp * 0.18, 3);
-  float c = gfbm(p + w * 1.8 + vec3(t * 0.6, 0, 0), fp, 7);
-  float th = uClo + (0.5 - big) * 0.9;
-  float cov = smoothstep(th, th + uEdge, c);
-  depth = smoothstep(th, th + 0.45, c);
-  cov *= rs(W * 0.5, W * 0.5 - 60.0, abs(q.z)); // thin out toward the rim
-  return clamp(cov, 0.0, 1.0);
+// ---------------------------------------------------------------- weather and clouds
+vec2 skyUV(vec3 p) { return vec2(atan(p.y, p.x) / (2.0 * PI), p.z / W + 0.5); }
+
+// The weather over a point: from the simulation's maps, or without them a procedural stand-in
+// of broad cloudy regions, some of them convective, with high wisps.
+vec4 skyAt(vec3 p) {
+  if (uHasSky > 0.5) return texture(uSky, skyUV(p));
+  float big = gfbm(p / 900.0, 0.0, 3), mid = gfbm(p / 260.0 + 3.1, 0.0, 3);
+  return vec4(smoothstep(0.45, 0.85, big * 0.7 + mid * 0.4), smoothstep(0.55, 0.85, gfbm(p / 700.0 + 9.7, 0.0, 3)),
+              smoothstep(0.45, 0.8, mid), 0.0);
 }
-float clouds(vec3 q, float fp) { float d; return clouds(q, fp, d); }
+vec4 airAt(vec3 p) { return uHasSky > 0.5 ? texture(uAir, skyUV(p)) : vec4(0.55, 0.5, 0.0, 0.0); }
+
+// Cells, for cumulus and the honeycomb of stratocumulus: the distances to the nearest and the
+// second nearest of one jittered point per cell, on the band unrolled (along the ring, across
+// it) and warped a little so no cell is round, with a whole number of cells round the ring so
+// the pattern closes on itself.
+vec2 cells(vec3 p, float size) {
+  float n = floor(2.0 * PI * R / size);
+  vec2 x = vec2((atan(p.y, p.x) / (2.0 * PI) + 0.5) * n, p.z / size);
+  x += (vec2(vn(p / (size * 1.7)), vn(p / (size * 1.7) + 7.3)) - 0.5) * 0.9;
+  vec2 i = floor(x), f = fract(x);
+  float d1 = 8.0, d2 = 8.0;
+  for (int y = -1; y <= 1; y++) for (int k = -1; k <= 1; k++) {
+    vec2 g = vec2(float(k), float(y)), c = vec2(mod(i.x + g.x, n), i.y + g.y);
+    vec2 o = vec2(h3(vec3(c, 1.7 + size)), h3(vec3(c, 4.1 + size))) * 0.9 + 0.05, r = g + o - f;
+    float d = dot(r, r);
+    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+  }
+  return sqrt(vec2(d1, d2));
+}
+
+// Low cloud at q on its deck: the map's cover, given the shape of its kind. Flat sheets and fog
+// are smooth; stratocumulus is rounded cells pressed together with clear gaps between them;
+// cumulus is popcorn a few km across, gathered in clumps; storm towers are great rounded heads.
+// A fine detail frays every edge, so nothing ends in a clean curve or a straight line.
+// Far away the shapes blur into their mean cover. `thick` is how tall the cloud stands, km.
+float lowCloud(vec3 q, float fp, vec4 sky, vec4 air, out float thick) {
+  float fog = air.b, cover = max(sky.r, fog), conv = sky.b * (1.0 - fog);
+  thick = 0.0;
+  if (cover < 0.004) return 0.0;
+  float t = uTime * 0.0006;               // the shapes change slowly; the map moves the weather
+  float sheet = gfbm(q / 55.0 + vec3(0.0, 0.0, t), fp / 55.0, 5), n = sheet;
+  float wComb = smoothstep(0.1, 0.35, conv) * (1.0 - smoothstep(0.45, 0.65, conv));
+  float wCu = smoothstep(0.45, 0.65, conv) * (1.0 - smoothstep(0.8, 0.95, conv));
+  float wTower = smoothstep(0.8, 0.95, conv);
+  if (wComb > 0.01) {
+    vec2 c = cells(q, 26.0);
+    n = mix(n, (1.0 - smoothstep(0.25, 0.85, c.x)) * 0.55 + smoothstep(0.0, 0.35, c.y - c.x) * 0.15 + sheet * 0.4, wComb);
+  }
+  if (wCu > 0.01) {
+    vec2 c = cells(q, 4.5);
+    float clump = gfbm(q / 40.0 + 3.3, fp / 40.0, 3);
+    n = mix(n, (1.0 - c.x * 1.15) * 0.6 + clump * 0.55, wCu);
+  }
+  if (wTower > 0.01) {
+    vec2 c = cells(q, 32.0);
+    n = mix(n, 1.1 - c.x + (gfbm(q / 7.0, fp / 7.0, 4) - 0.5) * 0.45, wTower);
+  }
+  n += (gfbm(q / 3.5 + 11.0, fp / 3.5, 3) - 0.5) * 0.22;   // frayed edges
+  float edge = mix(0.16, 0.08, conv);
+  float d = smoothstep(1.0 - cover - edge, 1.0 - cover + edge, n);
+  d = mix(d, cover, clamp(fp / 10.0 - 0.3, 0.0, 1.0) * (1.0 - wTower));
+  thick = mix(0.4, 2.0, d) + conv * conv * d * 10.0;
+  return d * rs(W * 0.5, W * 0.5 - 60.0, abs(q.z));   // thinning out toward the rims
+}
+
+// High cloud at q: cirrus drawn out along the wind, or over a storm its anvil, smooth and dense.
+float highCloud(vec3 q, float fp, vec4 sky, vec4 air) {
+  float cover = sky.g;
+  if (cover < 0.004) return 0.0;
+  vec3 tg = normalize(vec3(-q.y, q.x, 0.0)); vec2 w = air.rg * 2.0 - 1.0;
+  vec3 dir = length(w) > 0.05 ? normalize(w.x * tg + vec3(0.0, 0.0, w.y)) : tg;
+  vec3 s = q / 70.0; s -= dir * dot(s, dir) * 0.75;   // features four times longer along the wind
+  float n = gfbm(s + vec3(0.0, 0.0, uTime * 0.0004), fp / 70.0, 5);
+  float anvil = smoothstep(0.6, 0.9, sky.b);
+  n = mix(n, gfbm(q / 120.0, fp / 120.0, 3) * 0.6 + 0.4, anvil);
+  return smoothstep(1.0 - cover - 0.12, 1.0 - cover + 0.12, n) * mix(0.55, 0.95, anvil) * rs(W * 0.5, W * 0.5 - 60.0, abs(q.z));
+}
+
+// How much of a deck's sunlight a point of floor or lower cloud loses to the cloud above it,
+// found where the sun's ray crosses the deck. Storm towers cast from their tops, so higher.
+float cloudShadow(vec3 p, float mu, float fp) {
+  mu = max(mu, 0.12);
+  vec3 cl = p + uSun * ((LOWC + 5.0 * skyAt(p).b) / mu); vec4 sky = skyAt(cl), air = airAt(cl);
+  float thick; float dl = lowCloud(cl, fp, sky, air, thick);
+  float high = skyAt(p + uSun * (HIGHC / mu)).g;          // cirrus: its cover is enough at this scale
+  return clamp((1.0 - 0.85 * (1.0 - exp(-dl * thick * 1.5))) * (1.0 - 0.3 * high), 0.0, 1.0);
+}
 
 vec3 tSun(vec3 p) {
   float h = max(R - length(p.xy), 0.0); float mu = dot(upAt(p), uSun); if (mu <= 0.0) return vec3(0); mu = max(mu, 0.03);
   return exp(-(BR() * H * exp(-h / H) + BM * 1.1 * HM * exp(-h / HM)) / mu);
 }
 
+// Land or sea at a point on the floor: continents from a broad noise, coasts from a fine one.
+float landAt(vec3 p, float fp, out float cont, out float det) {
+  cont = fbm(p / 1400.0, fp / 1400.0, 7); det = fbm(p / 90.0, fp / 90.0, 5);
+  return smoothstep(uLand, uLand + 0.015, cont + det * 0.06);
+}
+
 vec3 ground(vec3 p, vec3 rd, float t, float fp) {
   vec3 n = upAt(p); float mu = dot(n, uSun); float sh = ringShadow(p + n * 0.5);
-  vec3 pn = p / 1400.0; float cont = fbm(pn, fp / 1400.0, 7); float det = fbm(p / 90.0, fp / 90.0, 5);
-  float land = smoothstep(uLand, uLand + 0.015, cont + det * 0.06);
+  float cont, det; float land = landAt(p, fp, cont, det);
   vec3 ocean = mix(uDeep, uSea, smoothstep(0.4, 0.53, cont) * (0.7 + 0.3 * det));
-  vec3 lc = mix(vec3(0.02, 0.05, 0.015), vec3(0.06, 0.065, 0.035), smoothstep(0.4, 0.7, det)); lc = mix(lc, vec3(0.5), smoothstep(0.7, 0.75, cont + det * 0.1));
+  // the land by how high and how far inland it lies: forest and grass along the coasts and
+  // lowlands, drier going inland to savanna and desert, bare rock on the mountains, snow on the
+  // highest of them
+  float inland = smoothstep(uLand, uLand + 0.12, cont), hgt = cont + det * 0.1;
+  float arid = smoothstep(0.4, 0.8, inland * 0.75 + fbm(p / 600.0, fp / 600.0, 3) * 0.55);
+  vec3 lc = mix(vec3(0.02, 0.05, 0.018), vec3(0.07, 0.075, 0.03), smoothstep(0.4, 0.7, det));
+  lc = mix(lc, vec3(0.2, 0.145, 0.08), arid);
+  lc = mix(lc, vec3(0.16, 0.15, 0.14), smoothstep(0.68, 0.73, hgt));
+  lc = mix(lc, vec3(0.72, 0.75, 0.8), smoothstep(0.76, 0.8, hgt));
   vec3 alb = mix(ocean, lc, land);
-  // cloud shadow
-  vec3 cp = p + uSun * (HC / max(mu, 0.15)); float cs = clouds(cp, fp);
-  vec3 E = SUNC * tSun(p) * sh * (1.0 - 0.75 * cs);
+  // shadows of the clouds overhead
+  float cs = 1.0 - cloudShadow(p, mu, fp);
+  vec3 E = SUNC * tSun(p) * sh * (1.0 - cs);
   vec3 col = alb * (E * max(mu, 0.0) + vec3(0.08, 0.14, 0.26) * 0.6 * clamp(mu + 0.3, 0.0, 1.0) + SHINE);
   // sun glint on water
   vec3 hv = normalize(uSun - rd); float sp = pow(max(dot(n, hv), 0.0), 180.0) * (1.0 - land) * (1.0 - cs);
@@ -155,15 +254,26 @@ vec3 ground(vec3 p, vec3 rd, float t, float fp) {
   return col;
 }
 
-vec3 cloudShade(vec3 q, vec3 rd, float fp, float c, float depth) {
+float hgPhase(float c, float g) { return (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * c, 1.5); }
+
+// The light on a cloud: sunlight that has crossed the air (tSun reddens it at a low sun), less
+// what cloud higher up or the cloud's own bulk toward the sun takes; thick cloud reflects more,
+// thin edges seen toward the sun glow with forward scattering, and rain greys it a little.
+// `lit` is the share of sunlight reaching it; `slope` is how much higher the cloud stands here
+// than a little way toward the sun (km): sunward faces catch the light, lee sides fall into
+// shade, and more so the lower the sun.
+vec3 cloudLight(vec3 q, vec3 rd, float d, float thick, float lit, float slope, float rain) {
   vec3 n = upAt(q); float mu = dot(n, uSun); float sh = ringShadow(q + n * 0.5);
-  vec3 ts = normalize(uSun - n * mu); float ds = clouds(q + ts * 6.0, fp);
-  vec3 E = SUNC * tSun(q) * sh;
-  vec3 col = uCloudC * (E * max(mu, 0.0) * (0.55 + 0.45 * (1.0 - ds)) * (0.62 + 0.38 * depth) * 0.9 + vec3(0.1, 0.17, 0.3) * 0.7 * clamp(mu + 0.3, 0.0, 1.0) + SHINE * 1.4);
+  vec3 E = SUNC * tSun(q) * sh * lit;
+  float A = 1.0 - exp(-d * thick * 1.5);
+  float self = clamp(1.0 + slope * 0.35 * (0.3 + smoothstep(0.0, 0.7, 1.0 - mu)), 0.3, 1.25);
+  vec3 direct = E * max(mu, 0.0) * self * (0.55 + 0.45 * A);
+  vec3 glow = E * hgPhase(dot(rd, uSun), 0.7) * 0.06 * (1.0 - A) * smoothstep(-0.05, 0.2, mu);
+  vec3 sky = vec3(0.1, 0.17, 0.3) * 0.7 * clamp(mu + 0.3, 0.0, 1.0) * (0.5 + 0.5 * A) + SHINE * 1.4;
+  vec3 col = uCloudC * (direct * 0.9 + sky + glow) * (1.0 - 0.3 * rain);
   // glory: diffraction rings around the anti-solar point, seen on cloud tops
   float th = acos(clamp(dot(rd, -uSun), -1.0, 1.0));
-  vec3 g = 0.5 + 0.5 * cos(th * vec3(70.0, 82.0, 98.0) * 6.2832 / 1.5);
-  col += E * max(mu, 0.0) * g * exp(-th / 0.045) * 0.35 * c;
+  col += E * max(mu, 0.0) * (0.5 + 0.5 * cos(th * vec3(70.0, 82.0, 98.0) * 6.2832 / 1.5)) * exp(-th / 0.045) * 0.35 * d;
   return col;
 }
 
@@ -203,7 +313,20 @@ vec3 stars(vec3 d) {
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 
 #ifndef FLASH
+// The land map for the weather simulation: the band unrolled, the ring's angle across the frame
+// (0 to 360 degrees, spinward to the right) and the band's width down it (-W/2 at the top).
+// Land in red, the continents' broad height in green (mountains above about 0.7, deep sea below
+// 0.4), the fine detail in blue. Drawn by the shader itself so it matches the drawn land exactly.
+void landMap() {
+  vec2 px = uOrigin + qt_TexCoord0 * uSize;
+  float phi = px.x / uRes.x * 2.0 * PI, z = (px.y / uRes.y - 0.5) * W;
+  vec3 p = vec3(R * cos(phi), R * sin(phi), z);
+  float cont, det; float land = landAt(p, 2.0 * PI * R / uRes.x, cont, det);
+  fragColor = vec4(land, clamp(cont, 0.0, 1.0), clamp(det, 0.0, 1.0), 1.0);
+}
+
 void main() {
+  if (uMode > 0.5) { landMap(); return; }
   vec2 px = uOrigin + qt_TexCoord0 * uSize;          // frame pixel, y down
   vec2 fc = vec2(px.x, uRes.y - px.y);               // y up, as in the lookdev
   vec2 uv = (2.0 * fc - uRes) / uRes.y; vec3 rd = normalize(uv.x * uRight + uv.y * uUp + uF * uFwd), ro = uCam;
@@ -217,8 +340,17 @@ void main() {
   vec3 p = ro + rd * tHit; float fp = tHit * pix;
   if (kind == 0) { col = stars(rd); }
   else if (kind == 1) {
-    vec3 g = ground(p, rd, tHit, fp); vec2 tcl = cyl(ro, rd, R - HC); vec3 q = ro + rd * tcl.y; float depth; float c = clouds(q, fp, depth);
-    col = mix(g, cloudShade(q, rd, fp, c, depth), c);
+    col = ground(p, rd, tHit, fp);
+    vec3 qL = ro + rd * cyl(ro, rd, R - LOWC).y, qH = ro + rd * cyl(ro, rd, R - HIGHC).y;
+    vec4 sky = skyAt(qL), air = airAt(qL);
+    float thick; float dL = lowCloud(qL, fp, sky, air, thick), dH = highCloud(qH, fp, sky, air);
+    if (dL > 0.003) {
+      vec3 n = upAt(qL); float mu = dot(n, uSun);
+      vec3 ts = normalize(uSun - n * mu + vec3(1e-4));
+      float tt; float toward = lowCloud(qL + ts * min(30.0, (1.0 + thick) / max(mu, 0.2)), fp, sky, air, tt);
+      col = mix(col, cloudLight(qL, rd, dL, thick, 1.0 - 0.35 * dH, dL * thick - toward * tt, sky.a), dL);
+    }
+    if (dH > 0.003) col = mix(col, cloudLight(qH, rd, dH, 0.8, 1.0, 0.0, 0.0) * vec3(0.97, 0.99, 1.02), dH * 0.85);
   }
   else if (kind == 2) {
     vec3 n = normalize(vec3(p.xy, 0.0)); float l = max(dot(n, uSun), 0.0); float pan = 0.8 + 0.2 * vn(vec3(p.xy / 40.0, p.z / 40.0));
@@ -277,10 +409,10 @@ void main() {
   vec2 px = uOrigin + qt_TexCoord0 * uSize;
   vec2 fc = vec2(px.x, uRes.y - px.y);
   vec2 uv = (2.0 * fc - uRes) / uRes.y; vec3 rd = normalize(uv.x * uRight + uv.y * uUp + uF * uFwd), ro = uCam;
-  vec2 tcl = cyl(ro, rd, R - HC); vec3 q = ro + rd * tcl.y;
+  vec2 tcl = cyl(ro, rd, R - LOWC); vec3 q = ro + rd * tcl.y;
   float d = length(q - uBolt), fall = exp(-d * d / (uBoltR * uBoltR));
   if (tcl.y <= 0.0 || abs(q.z) > W * 0.5 || fall < 0.002) { fragColor = vec4(0.0); return; }
-  float depth; float c = clouds(q, tcl.y * 2.0 / uRes.y / uF, depth);
+  float thick; float c = lowCloud(q, tcl.y * 2.0 / uRes.y / uF, skyAt(q), airAt(q), thick), depth = clamp(thick / 8.0, 0.0, 1.0);
   float lit = fall * (0.12 + 0.88 * c * (0.35 + 0.65 * depth));
   lit *= 1.0 - smoothstep(0.72, 1.0, length(qt_TexCoord0 * 2.0 - 1.0));  // round fade: no box edge
   fragColor = vec4(min(vec3(0.78, 0.85, 1.0) * lit * uFlash, vec3(1.0)), 0.0) * qt_Opacity;

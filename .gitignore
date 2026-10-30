@@ -8,3 +8,4 @@ sound/out/
 sound/lab/*.wav
 sound/lab/index.html
 .previous-screensaver
+weather/.venv/

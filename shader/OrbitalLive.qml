@@ -17,6 +17,7 @@ Item {
   // Moves the camera from frame to frame without starting over, as the idle flyover does:
   // function (look, sceneTime) returning overrides of the look, or null to hold still.
   property var motion: null
+  property var storms: []               // the weather simulation's storm cells, for the lightning
   signal frameFinished()
   signal lightning()                    // a strike, for its thunder
 
@@ -88,6 +89,7 @@ Item {
     if (pxW <= 0 || pxH <= 0) return false
     // Each frame is lit for the local hour and weather it starts in; its slices share them.
     if (slice === 0) {
+      if (!painter.latchSky()) return false     // the weather maps are still loading
       updateLook()
       painter.params = motion ? Scene.merge(look, motion(look, sceneTime)) : look
       painter.hour = Scene.clockHour()
@@ -120,6 +122,7 @@ Item {
 
   OrbitalPainter {
     id: painter
+    latchMaps: true
     width: orbital.width
     height: orbital.sliceH / orbital.dpr
     frameSize: Qt.size(orbital.pxW, orbital.pxH)
@@ -177,7 +180,8 @@ Item {
     z: 3
     painter: painter
     dpr: orbital.dpr
-    active: orbital.running && orbital.ready && !!orbital.look && orbital.look.storm > 0.5
+    storms: orbital.storms
+    active: orbital.running && orbital.ready && (orbital.storms.length > 0 || (!!orbital.look && orbital.look.storm > 0.5))
     onStruck: orbital.lightning()
   }
 

@@ -1,11 +1,14 @@
 import QtQuick
+import Quickshell
+import Quickshell.Io
 import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
 
 // Workspaces as lights along a gentle arc, the way their places lie along the Orbital (each
 // workspace is a place on the ring; see Scene.atPlace). Bright where you are, lit where a
-// workspace has windows, faint where it's empty. Hover for its number, click to go there.
+// workspace has windows, faint where it's empty. Hover for its number and the weather at its
+// place (from the weather simulation, weather/sim.py), click to go there.
 // As in Omarchy's own widget, workspaces 1 to 5 always show, and 6 to 10 while they exist.
 BarWidget {
   id: root
@@ -36,6 +39,20 @@ BarWidget {
   }
 
   function tinted(c, alpha) { return Qt.rgba(c.r, c.g, c.b, alpha) }
+
+  // The weather at each workspace's place, as the simulation last summed it up.
+  property var places: ({})
+  FileView {
+    path: Quickshell.env("HOME") + "/.cache/vereda-orbital/weather/status.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: { try { root.places = JSON.parse(text()).places || {} } catch (e) {} }
+  }
+  function tip(n) {
+    var p = places[String(n)]
+    return "Workspace " + n + (p && p.sky ? ": " + p.sky + (p.local ? ", " + p.local : "") : "")
+  }
 
   readonly property var ids: workspaceIds()
   readonly property real step: Style.space(16)                 // between lights, along the arc
@@ -91,7 +108,7 @@ BarWidget {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onEntered: { light.tooltipHovered = true; if (root.bar) root.bar.showTooltip(light, "Workspace " + light.modelData) }
+        onEntered: { light.tooltipHovered = true; if (root.bar) root.bar.showTooltip(light, root.tip(light.modelData)) }
         onExited: { light.tooltipHovered = false; if (root.bar) root.bar.hideTooltip(light) }
         onClicked: root.focusWorkspace(light.modelData)
       }
