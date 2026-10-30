@@ -18,9 +18,9 @@ ShellRoot {
       id: stage
       width: 1280; height: 720
       Image { anchors.fill: parent; source: "file://" + Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/backgrounds/orbital-live.png"; cache: false }
-      OrbitalIntro { id: intro; anchors.fill: parent; dpr: win.devicePixelRatio || 1.5; ship: Scene.defaults.ship; fontFamily: manrope.name }
+      OrbitalIntro { id: intro; anchors.fill: parent; dpr: win.devicePixelRatio || 1.5; params: Scene.merge(Scene.defaults, {hour: 0.5}); ship: Scene.defaults.ship; fontFamily: manrope.name }
     }
-    property var times: [100, 1300, 2000, 2600, 3300, 4300]
+    property var times: [300, 1600, 2400, 3000, 3600, 4200, 4800, 5600]
     property int k: 0
     property real t0: 0
     Timer { interval: 600; running: true; onTriggered: { win.t0 = Date.now(); intro.play(); shot.interval = win.times[0]; shot.start() } }

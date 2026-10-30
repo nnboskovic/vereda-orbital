@@ -439,6 +439,7 @@ Item {
         anchors.fill: parent
         z: 10
         dpr: panel.devicePixelRatio || 1
+        params: root.orbitalParams || Scene.defaults
         ship: (root.orbitalParams || Scene.defaults).ship || ""
         fontFamily: orbitalFont.name
         // at a fresh login, cover the screen as soon as the background is known, then play

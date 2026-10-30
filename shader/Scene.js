@@ -268,3 +268,78 @@ function showerPeak(name, year) {
   }
   return null;
 }
+
+// --- The login intro's 3D move: the Vereda Labs mark, flat before the camera at the boot
+// logo's size, turns in space and flies down to lie along the band, its long stroke running
+// spinward toward the ribbon and curving with the ring as it lands. Mark coordinates are its
+// SVG units about its centre (89, 58) with y up; the long stroke runs along (86, 116).
+var markLong = [[-43, -58], [43, 58], [89, 58], [7, -58]];
+var markShort = [[-89, 23], [-49, 23], [-27, -14], [-50, -43]];
+
+function quatFromBasis(r, u, n) {   // rotation whose columns are r, u, n
+  var m00 = r[0], m01 = u[0], m02 = n[0], m10 = r[1], m11 = u[1], m12 = n[1], m20 = r[2], m21 = u[2], m22 = n[2];
+  var tr = m00 + m11 + m22, s;
+  if (tr > 0) { s = Math.sqrt(tr + 1) * 2; return [(m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s, s / 4]; }
+  if (m00 > m11 && m00 > m22) { s = Math.sqrt(1 + m00 - m11 - m22) * 2; return [s / 4, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s]; }
+  if (m11 > m22) { s = Math.sqrt(1 + m11 - m00 - m22) * 2; return [(m01 + m10) / s, s / 4, (m12 + m21) / s, (m02 - m20) / s]; }
+  s = Math.sqrt(1 + m22 - m00 - m11) * 2; return [(m02 + m20) / s, (m12 + m21) / s, s / 4, (m10 - m01) / s];
+}
+function quatSlerp(a, b, k) {
+  var d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  if (d < 0) { b = b.map(function (x) { return -x }); d = -d; }
+  if (d > 0.9995) { var q = a.map(function (x, i) { return x + (b[i] - x) * k }); var l = Math.sqrt(q.reduce(function (s, x) { return s + x * x }, 0)); return q.map(function (x) { return x / l }); }
+  var th = Math.acos(d), sa = Math.sin((1 - k) * th) / Math.sin(th), sb = Math.sin(k * th) / Math.sin(th);
+  return a.map(function (x, i) { return x * sa + b[i] * sb });
+}
+function quatAxes(q) {
+  var x = q[0], y = q[1], z = q[2], w = q[3];
+  return [[1 - 2 * (y * y + z * z), 2 * (x * y + z * w), 2 * (x * z - y * w)],
+          [2 * (x * y - z * w), 1 - 2 * (x * x + z * z), 2 * (y * z + x * w)]];
+}
+function slerpDir(a, b, k) {
+  var d = Math.max(-1, Math.min(1, dot(a, b))), th = Math.acos(d);
+  if (th < 1e-5) return a;
+  return add(mul(a, Math.sin((1 - k) * th) / Math.sin(th)), mul(b, Math.sin(k * th) / Math.sin(th)));
+}
+
+// Start and end poses for screen size w x h (logical px), the mark markPx wide at the start.
+function introSetup(p, v, w, h, markPx) {
+  var aspect = w / h, D = 300;
+  var unit0 = (markPx / 178) * D / (v.F * h / 2);
+  var land = skyPoint(v, p.width, p.introX !== undefined ? p.introX : -0.12, p.introY !== undefined ? p.introY : -0.05, aspect, 10);
+  if (!land) return null;
+  var P = land.pos, phi = Math.atan2(P[1], P[0]), up = upAt(P), e1 = tanAt(phi), a = Math.atan2(116, 86), end = null;
+  for (var sign = 1; sign >= -1; sign -= 2) {
+    var e2 = [0, 0, sign];
+    var r1 = sub(mul(e1, Math.cos(a)), mul(e2, Math.sin(a))), u1 = add(mul(e1, Math.sin(a)), mul(e2, Math.cos(a))), n1 = cross(r1, u1);
+    if (dot(n1, up) > 0) { end = {r: r1, u: u1, n: n1}; break; }
+  }
+  var toP = sub(P, v.cam), d1 = Math.sqrt(dot(toP, toP));
+  return {v: v, aspect: aspect, w: w, h: h, D: D, unit0: unit0, unit1: (p.introLength || 7000) / 144.4,
+          d1: d1, dir1: mul(toP, 1 / d1), P: P, phi: phi, z: P[2], alt: R - Math.sqrt(P[0] * P[0] + P[1] * P[1]),
+          q0: quatFromBasis(v.right, v.up, mul(v.fwd, -1)), q1: quatFromBasis(end.r, end.u, end.n), end: end};
+}
+
+// The outline of a stroke at progress k (0..1) with the ring's curvature blended in by bend,
+// as screen points [x, y] in logical px (edges subdivided so the curve shows).
+function introOutline(s, poly, k, bend) {
+  var axes = quatAxes(quatSlerp(s.q0, s.q1, k)), unit = s.unit0 * Math.pow(s.unit1 / s.unit0, k);
+  var c = add(s.v.cam, mul(slerpDir(s.v.fwd, s.dir1, k), s.D * Math.pow(s.d1 / s.D, k)));
+  var out = [], n = 10;
+  for (var i = 0; i < poly.length; i++) {
+    var a = poly[i], b = poly[(i + 1) % poly.length];
+    for (var j = 0; j < n; j++) {
+      var t = j / n, mu = a[0] + (b[0] - a[0]) * t, mv = a[1] + (b[1] - a[1]) * t;
+      var X = add(c, mul(add(mul(axes[0], mu), mul(axes[1], mv)), unit));
+      if (bend > 0) {
+        var wv = mul(add(mul(s.end.r, mu), mul(s.end.u, mv)), s.unit1);
+        var along = dot(wv, tanAt(s.phi)), flat = add(s.P, wv);
+        var curved = ringPt(s.phi + along / (R - s.alt), s.alt, s.z + wv[2]);
+        X = add(X, mul(sub(curved, flat), bend));
+      }
+      var sp = project(s.v, X, s.aspect);
+      if (sp) out.push([(sp[0] + 1) / 2 * s.w, (1 - sp[1]) / 2 * s.h]);
+    }
+  }
+  return out;
+}
