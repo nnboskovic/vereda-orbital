@@ -50,9 +50,9 @@
 <main>
   <div class="mark">VEREDA LABS</div>
   <h1>The Orbital's sounds</h1>
-  <p class="lede">Every sound the desktop would make, made from one three-note cell shaped like the mark: a short drop, then a long rise.
-  The theme plays it whole; the ships answer with it resolved, questioning or turned round; signals and the sky borrow its notes.
-  Listen, then keep, change or drop each one.</p>
+  <p class="lede">Every sound the desktop would make, round and warm now: a Rhodes, soft glass, analog pads under a slow filter,
+  a round bass, a smooth hall. All of it grows from one three-note cell shaped like the mark, a short drop then a long rise.
+  The theme comes in three flavours on the same skeleton; keep the one you like and drop the others.</p>
   <div class="cell" aria-label="The cell: E, down to A, up to B">
     <svg width="260" height="64" viewBox="0 0 260 64">
       <polyline points="20,22 100,52 240,6" fill="none" stroke="#72d7df" stroke-opacity=".35" stroke-width="1"/>
@@ -153,9 +153,9 @@ function render() {
     row.append(button, text);
     const spacer = document.createElement("div"); row.append(spacer, canvas);
     const spacer2 = document.createElement("div"); row.append(spacer2, verdict);
-    if (m.id === "theme") {
+    if (m.id.startsWith("theme")) {
       const d = document.createElement("div"); d.className = "desk";
-      d.innerHTML = 'With the intro, on the laptop: <code>~/.local/share/vereda-orbital/sound/audition.sh theme</code>';
+      d.innerHTML = 'With the intro, on the laptop: <code>~/.local/share/vereda-orbital/sound/audition.sh ' + m.id + '</code>';
       const s3 = document.createElement("div"); row.append(s3, d);
     }
     list.appendChild(row); rows.push(row);
