@@ -324,7 +324,7 @@ function introSetup(p, v, w, h, markPx) {
     var ph = Math.atan2(hit.pos[1], hit.pos[0]);
     lo = Math.min(lo, ph); hi = Math.max(hi, ph);
   }
-  var edge = p.width / 2 + 140, alt = R - Math.sqrt(P[0] * P[0] + P[1] * P[1]);
+  var edge = p.width / 2 + 20, alt = R - Math.sqrt(P[0] * P[0] + P[1] * P[1]);
   var inFront = function (ph) { return project(v, ringPt(ph, alt, edge), aspect) && project(v, ringPt(ph, alt, -edge), aspect); };
   var near = lo - 0.03; while (!inFront(near) && near < lo) near += 0.005;
   var across = dot(end.u, [0, 0, 1]) * Math.cos(a) - dot(end.r, [0, 0, 1]) * Math.sin(a) > 0 ? 1 : -1;

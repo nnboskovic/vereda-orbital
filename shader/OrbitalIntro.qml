@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Shapes
 import "Scene.js" as Scene
 
@@ -46,30 +45,20 @@ Item {
   readonly property var longPath: outline(Scene.markLong, true)
   readonly property var shortPath: outline(Scene.markShort, false)
 
-  // The hole the long stroke cuts in the dark.
-  Item {
-    id: hole
+  // The dark, with the long stroke cut out of it exactly (the screen and the stroke filled
+  // even-odd), so the window onto the Orbital and the ivory share one edge.
+  Shape {
     anchors.fill: parent
-    visible: false
-    layer.enabled: true
-    Shape {
-      anchors.fill: parent
-      preferredRendererType: Shape.CurveRenderer
-      ShapePath { fillColor: "white"; strokeColor: "transparent"; PathPolyline { path: intro.longPath } }
-    }
-  }
-
-  Rectangle {
-    anchors.fill: parent
-    color: "#05080d"
+    preferredRendererType: Shape.CurveRenderer
     opacity: intro.veil
-    layer.enabled: true
-    layer.effect: MultiEffect {
-      maskEnabled: true
-      maskInverted: true
-      maskSource: hole
-      maskThresholdMin: 0.5
-      maskSpreadAtMin: 0.06
+    ShapePath {
+      fillColor: "#05080d"
+      strokeColor: "transparent"
+      fillRule: ShapePath.OddEvenFill
+      PathMultiline {
+        paths: [[Qt.point(-2, -2), Qt.point(intro.width + 2, -2), Qt.point(intro.width + 2, intro.height + 2),
+                 Qt.point(-2, intro.height + 2), Qt.point(-2, -2)], intro.longPath]
+      }
     }
   }
 
