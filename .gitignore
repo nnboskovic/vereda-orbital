@@ -1,0 +1,5 @@
+# built by build.sh
+*.qsb
+# local state written by install.sh
+.previous-theme
+__pycache__/

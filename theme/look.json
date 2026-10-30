@@ -1,0 +1,48 @@
+{
+  "phi": 0,
+  "alt": 1600,
+  "z": 0.35,
+  "yaw": 15,
+  "pitch": -22,
+  "roll": -50,
+  "fov": 84,
+  "dayCycle": true,
+  "hour": -1,
+  "noon": 12,
+  "sunTilt": 12.7,
+  "sunEl": 50,
+  "sunAz": 160,
+  "exposure": 0.95,
+  "nightExposure": 1.8,
+  "lights": 1,
+  "ringshine": 0.4,
+  "clouds": 0.55,
+  "cloudEdge": 0.08,
+  "streak": 1.5,
+  "land": 0.9,
+  "rayleigh": 2.6,
+  "sea": [
+    0,
+    0.16,
+    0.36
+  ],
+  "deep": [
+    0,
+    0.03,
+    0.12
+  ],
+  "sunColor": [
+    1,
+    0.98,
+    0.96
+  ],
+  "cloudColor": [
+    0.86,
+    0.92,
+    0.98
+  ],
+  "width": 2600,
+  "weather": true,
+  "sway": 0.6,
+  "speed": 1
+}

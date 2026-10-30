@@ -1,0 +1,38 @@
+# Vereda Orbital: sampled from the live Orbital background (space, band edge,
+# atmosphere, band cyan, cloud white) and the veredalabs.dev warm light.
+mode = "dark"
+
+accent = "#72d7df"
+selection = "#20375e"
+muted = "#4a6075"
+
+background = "#05080d"
+dark_background = "#030509"
+darker_background = "#010203"
+lighter_background = "#0c1422"
+
+foreground = "#d3dce2"
+dark_foreground = "#5f7384"
+light_foreground = "#b9c6cf"
+bright_foreground = "#eff2ea"
+
+hyprland_active_border = "rgba(72d7dfee) rgba(eff2eaee) 45deg"
+hyprland_inactive_border = "rgba(20375eaa)"
+active_border_color = "#72d7df"
+active_tab_background = "#20375e"
+
+red = "#e8836f"
+yellow = "#ffd9a8"
+orange = "#f4a77c"
+green = "#7fd6b0"
+cyan = "#72d7df"
+blue = "#6fa3d8"
+magenta = "#b6a1ee"
+brown = "#8a6a55"
+
+bright_red = "#f4a090"
+bright_yellow = "#ffe6c4"
+bright_green = "#a2e6c8"
+bright_cyan = "#94e4ea"
+bright_blue = "#94bdea"
+bright_magenta = "#cfc0f7"
