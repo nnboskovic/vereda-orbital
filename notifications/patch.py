@@ -4,21 +4,25 @@ is on, notifications arrive as Culture signal traffic: a transmission line in th
 Excession, then who the signal is from (x, a ship named for the app, or the Orbital's Hub for
 Omarchy's own) and to (o, this machine's ship from the theme's look), with the text in Manrope.
 
-    patch.py <plugin-folder>     (idempotent: an already patched clone is left alone)
+With the theme's sound on, each notification also chimes by its urgency (OrbitalSound).
+
+    patch.py <plugin-folder>     starts from Omarchy's own files each time, so it can be re-run
 """
+import os
+import shutil
 import sys
 from pathlib import Path
 
-MARK = "Vereda Orbital"
 folder = Path(sys.argv[1])
 service = folder / "Service.qml"
 card = folder / "components" / "NotificationCard.qml"
+source = Path(os.environ.get("OMARCHY_PATH", "/usr/share/omarchy")) / "shell" / "plugins" / "notifications"
+for name in ["Service.qml", "NotificationLogic.js", "components/NotificationCard.qml"]:
+    shutil.copyfile(source / name, folder / name)
 
 
 def patch(path, edits):
     text = path.read_text()
-    if MARK in text:
-        return
     for old, new in edits:
         if old not in text:
             sys.exit(f"{path.name}: cannot find {old.strip()[:60]!r}; Omarchy's plugin has changed")
@@ -44,6 +48,7 @@ patch(service, [
   }
   Timer { interval: 5000; repeat: true; running: true; triggeredOnStart: true; onTriggered: veredaLook.reload() }
   FontLoader { id: veredaFont; source: "Manrope-latin.woff2" }
+  OrbitalSound { id: veredaSound }
   function veredaSender(app) {
     var a = String(app || "")
     if (a === "" || /omarchy|notify-send/i.test(a)) return "Hub, Vereda Orbital"
@@ -51,6 +56,9 @@ patch(service, [
     return s.cls + " " + s.name
   }
 '''),
+    ("    persistPopupFile(snapshot)\n    watchForUpdates(notification, snapshot)\n",
+     "    if (service.vereda) veredaSound.play(snapshot.urgency === 2 ? \"broadcast\" : snapshot.urgency === 0 ? \"swept\" : \"tight-point\")\n"
+     "    persistPopupFile(snapshot)\n    watchForUpdates(notification, snapshot)\n"),
     ("              glyph: cardSlot.glyph\n", '''              glyph: cardSlot.glyph
               signalOn: service.vereda !== null
               signalFrom: service.veredaSender(cardSlot.app)

@@ -12,6 +12,7 @@ Item {
   property var painter: null            // the live painter: strikes share its camera, look and time
   property real dpr: 1
   readonly property real flashLevel: bolt.uFlash   // for tests
+  signal struck()                       // for the thunder
 
   function strike(nearX, nearY) {
     if (!painter || width <= 0 || height <= 0) return
@@ -43,6 +44,7 @@ Item {
       bolt.uBoltR = r
       flicker.peak = 0.35 + 0.85 * (v.dark || 0)
       flicker.restart()
+      if (nearX === undefined) struck()
       if (nearX === undefined && Math.random() < 0.35) { again.x0 = x; again.y0 = y; again.restart() }
       return
     }

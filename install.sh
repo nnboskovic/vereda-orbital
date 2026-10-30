@@ -10,10 +10,15 @@ plugin="$HOME/.config/omarchy/plugins/$user.background"
 theme="$HOME/.config/omarchy/themes/vereda-orbital"
 
 "$kit/build.sh"
+# The sounds, rendered from sound/motifs.js (needs Node), and the orbital-sound command.
+if command -v node >/dev/null; then node "$kit/sound/render.js" >/dev/null; else echo "Node is missing: no sounds rendered"; fi
+mkdir -p "$HOME/.local/bin" "$HOME/.config/vereda-orbital"
+ln -sf "$kit/sound/orbital-sound" "$HOME/.local/bin/orbital-sound"
+[[ -s $HOME/.config/vereda-orbital/sound.json ]] || echo '{"song": "funk", "on": true, "volume": 0.8}' >"$HOME/.config/vereda-orbital/sound.json"
 
 # The live background rides in Omarchy's own background plugin, cloned so updates leave it alone.
 [[ -d $plugin ]] || omarchy plugin clone omarchy.background
-cp "$kit/plugin/Background.qml" "$kit/shader/"{OrbitalLive.qml,OrbitalPainter.qml,OrbitalWeather.qml,OrbitalLightning.qml,OrbitalMeteors.qml,OrbitalLights.qml,OrbitalSessions.qml,OrbitalIntro.qml,Scene.js,orbital.frag.qsb,flash.frag.qsb,Manrope-latin.woff2} "$plugin/"
+cp "$kit/plugin/Background.qml" "$kit/shader/"{OrbitalLive.qml,OrbitalPainter.qml,OrbitalWeather.qml,OrbitalLightning.qml,OrbitalMeteors.qml,OrbitalLights.qml,OrbitalSessions.qml,OrbitalIntro.qml,OrbitalSound.qml,Scene.js,orbital.frag.qsb,flash.frag.qsb,Manrope-latin.woff2} "$plugin/"
 
 # The theme: colours, icons, the look, and the still frame the live background starts from
 # (also what the lock screen and theme picker show). Rendered at the focused monitor's size.
@@ -38,7 +43,7 @@ grep -q '"vereda.drone"' "$HOME/.config/omarchy/shell.json" 2>/dev/null || omarc
 # Notifications as Culture signal traffic: a clone of Omarchy's notifications, patched.
 notes="$HOME/.config/omarchy/plugins/$user.notifications"
 [[ -d $notes ]] || omarchy plugin clone omarchy.notifications
-cp "$kit/shader/"{Scene.js,Manrope-latin.woff2} "$notes/"
+cp "$kit/shader/"{Scene.js,Manrope-latin.woff2,OrbitalSound.qml} "$notes/"
 "$kit/notifications/patch.py" "$notes"
 
 # Session lights read the sessions Claude Code's hooks record. The hooks live in Claude Code's

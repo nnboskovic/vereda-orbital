@@ -15,6 +15,7 @@ Item {
   property var sessions: []             // Claude Code sessions, shown as moored ships (OrbitalLights)
   property var meteorDate: null         // a preview date for the meteor calendar; null follows the clock
   signal frameFinished()
+  signal lightning()                    // a strike, for its thunder
 
   // Saves what the Orbital shows right now (frames only, no lights or flashes) as an image.
   function snapshot(path, done) {
@@ -174,6 +175,7 @@ Item {
     painter: painter
     dpr: orbital.dpr
     active: orbital.running && orbital.ready && !!orbital.look && orbital.look.storm > 0.5
+    onStruck: orbital.lightning()
   }
 
   OrbitalLights {

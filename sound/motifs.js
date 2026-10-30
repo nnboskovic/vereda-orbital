@@ -400,23 +400,6 @@ function thunder() {   // distant thunder after the flash: a low rumble in rolls
   place(tr, lp24(noise(6, "pink", 17, t => 0.25 * env(t)), 420), 0, 0.5, 0.2, 0.5);
   return finish(tr, -12, {wet: 0.3});
 }
-function meteor() {    // a meteor: a faint falling whistle and a breath of air, crossing
-  const tr = track(2.2);
-  const w = glide(2600, 1300, 0.6, {attack: 0.1, release: 0.4});
-  place(tr, w, 0, 0.2, -0.4, 0.8); place(tr, w, 0.005, 0.2, 0.4, 0.8);
-  place(tr, biquad(noise(0.7, "pink", 5, t => smooth(t / 0.1) * (1 - smooth((t - 0.3) / 0.4))), "bp", 4500, 0.8), 0, 0.25, 0, 0.8);
-  return finish(tr, -24);
-}
-function fireball() {  // a Taurid fireball: lower, slower, softly crackling, and a far-off thump
-  const tr = track(4.2), r = rng(41);
-  place(tr, glide(760, 240, 1.4, {attack: 0.12, release: 0.9, h2: 0.15}), 0, 0.3, -0.3, 0.6);
-  const crackle = new Float32Array(Math.ceil(1.3 * SR));
-  for (let i = 0; i < crackle.length; i++) if (r() < 0.003) crackle[i] = (r() * 2 - 1) * (1 - i / crackle.length);
-  place(tr, lp24(biquad(crackle, "bp", 1800, 1), 3000), 0.05, 2.4, 0.2, 0.6);
-  place(tr, glide(hz("A1"), 40, 1.4, {attack: 0.02, release: 1.2, h2: 0.3}), 1.3, 0.5, 0, 0.45);
-  return finish(tr, -16);
-}
-
 // id, group, name, when it plays, render
 const MOTIFS = [
   ["theme", "Theme", "The way in: boot", "At login, with the intro. Closest to the Windows 95 startup's shape: a sparkle, a warm chord swelling in, the cell as a chime melody, a lift, a bloom that rings out.", () => theme("boot")],
@@ -430,8 +413,6 @@ const MOTIFS = [
   ["tight-point", "Signals", "Tight point, M16", "A normal notification.", tightPoint],
   ["broadcast", "Signals", "Broadcast, M32", "A critical notification.", broadcast],
   ["thunder", "Sky", "Thunder", "A second or few after each lightning strike in a real thunderstorm, while the desktop shows.", thunder],
-  ["meteor", "Sky", "Meteor", "A meteor crossing, on the real shower calendar.", meteor],
-  ["fireball", "Sky", "Fireball", "The odd slow fireball (the Taurids are known for them).", fireball],
 ].map(([id, group, name, when, render]) => ({id, group, name, when, render}));
 
 module.exports = {SR, MOTIFS};

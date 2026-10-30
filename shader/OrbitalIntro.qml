@@ -17,6 +17,7 @@ Item {
   property string ship: ""
   property string fontFamily: ""
   readonly property bool playing: run.running
+  signal started()                      // the song starts here
 
   function play() {
     var p = Scene.merge(params, {introX: 0.35, introY: 0.45, introLength: 10000})
@@ -26,6 +27,7 @@ Item {
     fadeFrom = Scene.introCoverAt(setup, 0.7)
     visible = true
     run.restart()
+    started()
   }
 
   visible: false

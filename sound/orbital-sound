@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# The Orbital's sounds: pick the intro song, switch them on or off, set the volume, listen.
+#   orbital-sound song funk|boot|disco|shuffle
+#   orbital-sound on|off [theme|ships|signals|sky]
+#   orbital-sound volume 0.6
+#   orbital-sound play <id>       e.g. theme-funk, needs-you, tight-point, thunder
+#   orbital-sound status
+# Settings: ~/.config/vereda-orbital/sound.json, read by the shell as it changes.
+set -euo pipefail
+
+conf="$HOME/.config/vereda-orbital/sound.json"
+kit="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+mkdir -p "$(dirname "$conf")"
+[[ -s $conf ]] || echo '{"song": "funk", "on": true, "volume": 0.8}' >"$conf"
+
+set_key() { # key, jq value
+  local tmp; tmp=$(mktemp "$conf.XXXXXX")
+  jq --arg k "$1" --argjson v "$2" '.[$k] = $v' "$conf" >"$tmp" && mv -f "$tmp" "$conf"
+}
+
+case "${1:-status}" in
+  song)
+    [[ ${2:-} =~ ^(funk|boot|disco|shuffle)$ ]] || { echo "songs: funk boot disco shuffle" >&2; exit 1; }
+    set_key song "\"$2\""
+    echo "intro song: $2"
+    ;;
+  on | off)
+    v=$([[ $1 == on ]] && echo true || echo false)
+    if [[ -n ${2:-} ]]; then
+      [[ $2 =~ ^(theme|ships|signals|sky)$ ]] || { echo "groups: theme ships signals sky" >&2; exit 1; }
+      set_key "$2" "$v"; echo "$2 sounds $1"
+    else
+      set_key on "$v"; echo "sounds $1"
+    fi
+    ;;
+  volume)
+    [[ ${2:-} =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]] || { echo "volume: 0 to 1" >&2; exit 1; }
+    set_key volume "$2"; echo "volume $2"
+    ;;
+  play)
+    "$kit/audition.sh" "${2:?which sound}"
+    ;;
+  status)
+    jq -r '"sounds " + (if .on == false then "off" else "on" end) + ", volume " + ((.volume // 0.8) | tostring) + ", intro song " + (.song // "funk")
+           + ([("theme", "ships", "signals", "sky") as $g | select(.[$g] == false) | $g] | if length > 0 then ", off: " + join(", ") else "" end)' "$conf"
+    ;;
+  *)
+    sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+    exit 1
+    ;;
+esac

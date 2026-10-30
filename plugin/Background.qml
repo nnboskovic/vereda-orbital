@@ -51,6 +51,41 @@ Item {
   }
   property var orbitalMeteorPreview: null
 
+  // Sound: the intro's song, the ships' leitmotifs from the sessions' changes, thunder after
+  // lightning (OrbitalSound plays them; orbital-sound sets them).
+  OrbitalSound { id: orbitalSound }
+  property var orbitalShipStates: null
+  function orbitalShipStatesNow() {
+    var now = {}, list = orbitalSessions.sessions
+    for (var i = 0; i < list.length; i++) now[list[i].id] = list[i].state
+    return now
+  }
+  Connections {
+    target: orbitalSessions
+    function onSessionsChanged() {
+      var now = root.orbitalShipStatesNow(), prev = root.orbitalShipStates
+      if (prev !== null) {
+        for (var id in now) {
+          var was = prev[id], is = now[id]
+          if (was === undefined && is !== "gone") orbitalSound.play("arrive")
+          else if (is === "waiting" && was !== "waiting") orbitalSound.play("needs-you")
+          else if (is === "idle" && (was === "working" || was === "waiting")) orbitalSound.play("done")
+          else if (is === "gone" && was !== undefined && was !== "gone") orbitalSound.play("depart")
+        }
+      }
+      root.orbitalShipStates = now
+    }
+  }
+  // the sessions already alongside when the shell starts are not news
+  Timer { interval: 4000; running: true; onTriggered: if (root.orbitalShipStates === null) root.orbitalShipStates = root.orbitalShipStatesNow() }
+  // thunder, a second or few after the flash, as from a storm some way off
+  Timer { id: orbitalThunder; onTriggered: orbitalSound.play("thunder") }
+  function orbitalLightning() {
+    if (orbitalThunder.running) return
+    orbitalThunder.interval = 1200 + Math.random() * 3000
+    orbitalThunder.start()
+  }
+
   // The login intro: the Vereda Labs mark opening into the Orbital. It plays when the shell
   // starts within a minute and a half of Hyprland (its instance signature carries its start
   // time), so a shell restart later does not replay it; omarchy-shell orbital intro replays it.
@@ -335,6 +370,7 @@ Item {
         sessions: orbitalSessions.sessions
         meteorDate: root.orbitalMeteorPreview
         onFrameFinished: if (panel.modelData === Quickshell.screens[0]) root.orbitalSnapshot(orbitalLive)
+        onLightning: if (panel.modelData === Quickshell.screens[0]) root.orbitalLightning()
         // Only spend the GPU while the desktop on this screen is actually showing.
         readonly property var monitor: Hyprland.monitorFor(panel.screen)
         readonly property var workspace: monitor ? monitor.activeWorkspace : null
@@ -442,10 +478,11 @@ Item {
         params: root.orbitalParams || Scene.defaults
         ship: (root.orbitalParams || Scene.defaults).ship || ""
         fontFamily: orbitalFont.name
+        onStarted: if (panel.modelData === Quickshell.screens[0]) orbitalSound.play("song")
         // at a fresh login, cover the screen as soon as the background is known, then play
-        property bool started: false
-        readonly property bool wanted: root.orbitalFreshLogin && root.orbitalBackground && !started
-        onWantedChanged: if (wanted) { started = true; play() }
+        property bool autoPlayed: false
+        readonly property bool wanted: root.orbitalFreshLogin && root.orbitalBackground && !autoPlayed
+        onWantedChanged: if (wanted) { autoPlayed = true; play() }
         Connections {
           target: root
           function onOrbitalIntroRequestsChanged() { if (root.orbitalBackground) orbitalIntro.play() }

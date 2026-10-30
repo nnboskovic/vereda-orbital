@@ -134,6 +134,30 @@ boot screen leads straight into it. Applying it to the boot screen needs root, s
 is yours to run: `omarchy plymouth set by theme vereda-orbital`
 (`omarchy plymouth reset` undoes it).
 
+## Sound
+
+Every sound is synthesised in `sound/motifs.js` (no samples) and rendered to WAVs by
+`sound/render.js` at install: a Rhodes, soft glass, analog pads under a slow filter, a round
+bass and a convolution hall, leaning on Jamiroquai and Interstella 5555. All of it grows from
+one cell shaped like the mark, E5 down to A4 up to B5.
+
+- **The way in**: the intro's song, following the Windows 95 startup's shape (a sparkle, a
+  warm chord, the cell as a chime melody, a lift, a bloom as the ivory dissolves) over
+  Dmaj9, E9sus, Amaj9. Three flavours: funk (default), boot, disco, or shuffle.
+- **Ships**: a session comes alongside, needs you, finishes its turn, leaves.
+- **Signals**: each notification by urgency (swept, tight point, broadcast).
+- **Sky**: thunder a second or few after each lightning strike.
+
+`OrbitalSound.qml` plays them through PipeWire; ships and signals keep quiet under Do Not
+Disturb. `orbital-sound` sets them up:
+
+    orbital-sound song funk|boot|disco|shuffle
+    orbital-sound on|off [theme|ships|signals|sky]
+    orbital-sound volume 0.6
+    orbital-sound play needs-you
+
+`sound/lab/` builds the listening page the sounds were chosen on.
+
 ## Changing the look
 
 Edit `theme/look.json` (camera, sun, clouds, colours; every key is described in
