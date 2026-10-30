@@ -509,6 +509,35 @@ function thunder() {   // distant thunder after the flash: a low rumble in rolls
   place(tr, lp24(noise(6, "pink", 17, t => 0.25 * env(t)), 420), 0, 0.5, 0.2, 0.5);
   return finish(tr, -12, {wet: 0.3});
 }
+// ---------------------------------------------------------------- the flyover
+// A quiet pad under the idle flyover: the theme's lift (Dmaj9, E9sus, Amaj9) and a soft F#m11,
+// each swelling in and out over twenty seconds under a filter that breathes. It loops without
+// a seam: whatever rings past the end, chord tails and hall alike, folds back onto the start.
+function drift() {
+  const LOOP = 64, tr = track(LOOP + 12);
+  const chords = [IV.pad, V.pad, I.pad.slice(1), ["F#2", "C#3", "E3", "A3", "B3", "E4"]];
+  chords.forEach((c, k) => placeSt(tr, pad(notes(c), 22, {attack: 6, release: 7, spread: 7, vib: 0.002, seed: 40 + k,
+    cut: t => 700 + 450 * Math.sin(2 * Math.PI * t / 22 - 1.2)}), k * 16, 0.5, 0.6));
+  return finishLoop(tr, LOOP, -24);
+}
+// The hall, the soft top and the saturation as in finish(), then the part past `loop` seconds
+// added back onto the start, so the file plays round and round without a seam.
+function finishLoop(tr, loop, peakDb) {
+  const wl = convolve(tr.sL, hallIR(3.2, 101)), wr = convolve(tr.sR, hallIR(3.2, 202));
+  const n = Math.round(loop * SR), out = {n, L: new Float32Array(n), R: new Float32Array(n)};
+  let peak = 1e-9;
+  for (const [side, w] of [["L", wl], ["R", wr]]) {
+    const x = tr[side];
+    for (let i = 0; i < tr.n; i++) x[i] += w[i] * 0.45;
+    const top = biquad(x, "hp", 7500, 0.6);
+    for (let i = 0; i < tr.n; i++) out[side][i % n] += Math.tanh((x[i] - 0.4 * top[i]) * 1.1) / 1.1;
+    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[side][i]));
+  }
+  const g = Math.pow(10, peakDb / 20) / peak;
+  for (let i = 0; i < n; i++) { out.L[i] *= g; out.R[i] *= g; }
+  return out;
+}
+
 // id, group, name, when it plays, render
 const MOTIFS = [
   ["theme", "Theme", "The way in: boot", "At login, with the intro. Closest to the Windows 95 startup's shape: a sparkle, a warm chord swelling in, the cell as a chime melody, a lift, a bloom that rings out.", () => theme("boot")],
@@ -523,6 +552,7 @@ const MOTIFS = [
   ["tight-point", "Signals", "Tight point, M16", "A normal notification.", tightPoint],
   ["broadcast", "Signals", "Broadcast, M32", "A critical notification.", broadcast],
   ["thunder", "Sky", "Thunder", "A second or few after each lightning strike in a real thunderstorm, while the desktop shows.", thunder],
+  ["drift", "Sky", "Drift", "A quiet pad under the idle flyover, looping for as long as it runs.", drift],
 ].map(([id, group, name, when, render]) => ({id, group, name, when, render}));
 
 module.exports = {SR, MOTIFS};

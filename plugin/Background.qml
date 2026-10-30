@@ -6,6 +6,7 @@ import Quickshell.Services.UPower
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Shapes
+import QtMultimedia
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
@@ -112,6 +113,111 @@ Item {
   }
   Process { id: snapshotMove }
 
+  // Each workspace is its own place on the Orbital (Scene.atPlace). Every screen draws a still
+  // of each place every ten minutes, for a workspace switch to fade to; they're kept here.
+  readonly property string orbitalPlacesDir: home + "/.cache/vereda-orbital/places"
+  property int orbitalStillsRequests: 0
+  property var orbitalPlaceInfo: null
+  Process { command: ["mkdir", "-p", root.orbitalPlacesDir]; running: true }
+
+  // The lock screen shows the place you locked from: on every change of place the place's
+  // still replaces the background image, as the ten-minute snapshot does.
+  function orbitalLockFrom(path) {
+    if (!root.orbitalActive || !path || !root.currentBackground || lockCopy.running) return
+    lockCopy.command = ["sh", "-c", 'cp -f "$1" "$2.next" && mv -f "$2.next" "$2"', "sh", path, root.currentBackground]
+    lockCopy.running = true
+    root.orbitalSnapshotAt = Date.now()
+  }
+  Process { id: lockCopy }
+
+  // The idle flyover. After `flyover` seconds without input (Omarchy's own screensaver is off),
+  // a window over everything sets out from the place you left and drifts on along the band
+  // (Scene.flyoverMotion), with the quiet drift pad when the sky's sounds are on. A key, the
+  // mouse, or a hand in view (with hyprhands on) ends it, and so does the lock taking over.
+  readonly property int flyoverAfter: root.orbitalParams ? (root.orbitalParams.flyover || 0) : 0
+  property bool flying: false
+  property real flyingSince: 0
+  property bool flyoverWanted: false
+  onFlyingChanged: {
+    if (flying) {
+      flyingSince = Date.now()
+      flyoverHandsProbe.reload()
+      if (orbitalSound.setting("on", true) && orbitalSound.setting("sky", true) !== false) {
+        driftFadeOut.stop()
+        driftOut.volume = 0
+        driftPad.play()
+        driftFadeIn.to = Math.max(0, Math.min(1, Number(orbitalSound.setting("volume", 0.8))))
+        driftFadeIn.restart()
+      }
+    } else {
+      flyoverHands.connected = false
+      driftFadeIn.stop()
+      if (driftPad.playbackState === MediaPlayer.PlayingState) driftFadeOut.restart()
+    }
+  }
+  function startFlyover() {
+    if (!root.orbitalActive || root.flying) return
+    root.flyoverWanted = true
+    if (!lockCheck.running) lockCheck.running = true
+  }
+  IdleMonitor {
+    enabled: root.orbitalActive && root.flyoverAfter > 0
+    respectInhibitors: true
+    timeout: Math.max(1, root.flyoverAfter)
+    onIsIdleChanged: isIdle ? root.startFlyover() : (root.flying = false)
+  }
+  // Not over the lock screen: check before setting out, and every few seconds while flying.
+  Process {
+    id: lockCheck
+    command: ["omarchy-shell", "-q", "lock", "isLocked"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var locked = String(text || "").trim() === "true"
+        if (locked) root.flying = false
+        else if (root.flyoverWanted) root.flying = true
+        root.flyoverWanted = false
+      }
+    }
+  }
+  Timer { interval: 3000; repeat: true; running: root.flying; onTriggered: if (!lockCheck.running) lockCheck.running = true }
+  // A hand in view ends it, when hyprhands is running (its socket is there: a socket isn't a
+  // regular file, so finding it reads as NotAFile).
+  FileView {
+    id: flyoverHandsProbe
+    path: Quickshell.env("XDG_RUNTIME_DIR") + "/hyprhands.sock"
+    printErrors: false
+    onLoadFailed: error => { if (root.flying && error !== FileViewError.FileNotFound) flyoverHands.connected = true }
+  }
+  Socket {
+    id: flyoverHands
+    path: flyoverHandsProbe.path
+    onConnectedChanged: if (connected) { write('{"role":"flyover"}\n'); flush() }
+    parser: SplitParser {
+      onRead: line => {
+        try {
+          var m = JSON.parse(line)
+          if (m.hands && m.hands.length && Date.now() - root.flyingSince > 1500) root.flying = false
+        } catch (e) {}
+      }
+    }
+  }
+  MediaPlayer {
+    id: driftPad
+    source: "file://" + root.home + "/.local/share/vereda-orbital/sound/out/drift.wav"
+    loops: MediaPlayer.Infinite
+    audioOutput: AudioOutput { id: driftOut; volume: 0 }
+  }
+  NumberAnimation { id: driftFadeIn; target: driftOut; property: "volume"; duration: 4000; easing.type: Easing.InOutQuad }
+  NumberAnimation {
+    id: driftFadeOut
+    target: driftOut
+    property: "volume"
+    to: 0
+    duration: 1200
+    easing.type: Easing.InOutQuad
+    onFinished: driftPad.stop()
+  }
+
   // omarchy-shell orbital weather '{"cover":100,"code":95}' previews a weather;
   // omarchy-shell orbital weather '' goes back to the real one; status shows both.
   IpcHandler {
@@ -123,6 +229,13 @@ Item {
     }
 
     function intro(): void { root.orbitalIntroRequests++ }
+
+    // omarchy-shell orbital stills draws every workspace's place again now.
+    function stills(): void { root.orbitalStillsRequests++ }
+
+    // omarchy-shell orbital flyover starts the idle flyover now, to see it; any key or the mouse ends it.
+    function flyover(): void { root.startFlyover() }
+    function land(): void { root.flying = false }
 
     // omarchy-shell orbital meteors geminids previews a shower at its peak; '' goes back to tonight.
     function meteors(name: string): void {
@@ -136,6 +249,7 @@ Item {
                              meteorsPerMinute: Math.round(sky.reduce(function (a, m) { return a + m.rate }, 0) / 15 * 100) / 100,
                              showers: sky.map(function (m) { return m.shower.name + " " + m.rate.toFixed(1) }),
                              meteorPreview: root.orbitalMeteorPreview, sessions: orbitalSessions.sessions,
+                             places: root.orbitalPlaceInfo,
                              snapshotAt: root.orbitalSnapshotAt ? new Date(root.orbitalSnapshotAt).toISOString() : null})
     }
   }
@@ -364,7 +478,7 @@ Item {
         id: orbitalLive
         anchors.fill: parent
         dpr: panel.devicePixelRatio || 1
-        params: root.orbitalParams || Scene.defaults
+        params: Scene.atPlace(root.orbitalParams || Scene.defaults, panel.livePlace)
         weather: root.orbitalWeatherPreview || orbitalWeather.conditions
         previewing: root.orbitalWeatherPreview !== null
         sessions: orbitalSessions.sessions
@@ -372,9 +486,7 @@ Item {
         onFrameFinished: if (panel.modelData === Quickshell.screens[0]) root.orbitalSnapshot(orbitalLive)
         onLightning: if (panel.modelData === Quickshell.screens[0]) root.orbitalLightning()
         // Only spend the GPU while the desktop on this screen is actually showing.
-        readonly property var monitor: Hyprland.monitorFor(panel.screen)
-        readonly property var workspace: monitor ? monitor.activeWorkspace : null
-        readonly property bool desktopShowing: !workspace || workspace.toplevels.values.length === 0
+        readonly property bool desktopShowing: !panel.hyprWorkspace || panel.hyprWorkspace.toplevels.values.length === 0
         visible: root.orbitalActive
         running: visible && root.incomingBackground === "" && desktopShowing
         // Never fully transparent: Qt skips rendering an opacity-0 subtree, captures included,
@@ -383,6 +495,163 @@ Item {
         Behavior on opacity { NumberAnimation { duration: 700; easing.type: Easing.InOutQuad } }
         // Half the frame rate on battery; the clouds keep their pace, just in coarser steps.
         tickMs: UPower.onBattery ? 120 : 60
+      }
+
+      // Places. `place` is where this screen's workspace is; `livePlace` is what the live Orbital
+      // draws. On a switch the new place's still fades in over the screen, the live Orbital moves
+      // there underneath, and the still lifts once the live one is back. With windows open the
+      // still stays, so each workspace keeps its own place behind them.
+      readonly property var hyprMonitor: Hyprland.monitorFor(panel.screen)
+      readonly property var hyprWorkspace: hyprMonitor ? hyprMonitor.activeWorkspace : null
+      property int place: 1
+      property int livePlace: 1
+      property var stills: ({})             // place -> its still, for the places drawn this session
+      property int stillsVersion: 0
+      readonly property bool caughtUp: orbitalLive.ready && orbitalLive.running && livePlace === place && orbitalLive.opacity >= 0.999
+
+      function updatePlace() {
+        var n = Scene.placeOf(hyprWorkspace ? hyprWorkspace.id : 1)
+        if (n > 0) place = n
+      }
+      onHyprWorkspaceChanged: updatePlace()
+      Component.onCompleted: { updatePlace(); livePlace = place }
+      onPlaceChanged: {
+        if (place === livePlace) { cover.hide(); return }
+        var still = stills[place]
+        if (!root.orbitalActive || !still) { livePlace = place; return }
+        cover.show(root.imageUrl(still) + "?v=" + stillsVersion)
+        if (panel.modelData === Quickshell.screens[0]) root.orbitalLockFrom(still)
+      }
+      onCaughtUpChanged: if (caughtUp) cover.hide()
+
+      function drawPlaces() {
+        if (!root.orbitalActive) return
+        var order = [place]
+        for (var n = 1; n <= 10; n++) if (n !== place) order.push(n)
+        order.push(0)                       // and the map
+        studio.render(order)
+      }
+
+      // Beside the map, where each workspace's place and the hub land on it, as fractions of
+      // the screen, for the overview to put its plates on (vereda.hands, Overview.qml).
+      function writeMapKey(path) {
+        var look = Scene.merge(root.orbitalParams || Scene.defaults, {overhead: true})
+        var view = Scene.frame(look, 0, Scene.clockHour()), aspect = panel.width / Math.max(1, panel.height)
+        var key = {places: {}, hub: null}
+        function frac(q) { return q ? [Math.round((q[0] + 1) / 2 * 1e4) / 1e4, Math.round((1 - q[1]) / 2 * 1e4) / 1e4] : null }
+        for (var n = 1; n <= 10; n++) key.places[n] = frac(Scene.placeOnScreen(root.orbitalParams || Scene.defaults, view, n, aspect))
+        key.hub = frac(Scene.project(view, [0, 0, 0], aspect))
+        mapKey.command = ["sh", "-c", 'printf %s "$1" > "$2.next" && mv -f "$2.next" "$2"', "sh", JSON.stringify(key),
+                          path.replace(/\.png$/, ".json")]
+        mapKey.running = true
+      }
+      Process { id: mapKey }
+
+      OrbitalCover {
+        id: cover
+        anchors.fill: parent
+        visible: root.orbitalActive
+        onShown: panel.livePlace = panel.place
+      }
+
+      OrbitalStudio {
+        id: studio
+        anchors.fill: parent
+        z: -1
+        dpr: panel.devicePixelRatio || 1
+        params: root.orbitalParams || Scene.defaults
+        weather: root.orbitalWeatherPreview || orbitalWeather.conditions
+        tickMs: UPower.onBattery ? 120 : 60
+        folder: root.orbitalPlacesDir
+        prefix: panel.screen ? panel.screen.name : "screen"
+        onPlaceDone: (place, path) => {
+          if (place === 0) { panel.writeMapKey(path); return }
+          var next = {}
+          for (var k in panel.stills) next[k] = panel.stills[k]
+          next[place] = path
+          panel.stills = next
+          panel.stillsVersion++
+          if (place === panel.place && panel.modelData === Quickshell.screens[0]) root.orbitalLockFrom(path)
+        }
+      }
+      // every ten minutes, and soon after the shell starts (past the login intro)
+      Timer { interval: 10 * 60 * 1000; repeat: true; running: root.orbitalActive; onTriggered: panel.drawPlaces() }
+      Timer { interval: 12000; running: root.orbitalActive; onTriggered: panel.drawPlaces() }
+      Connections {
+        target: root
+        function onOrbitalStillsRequestsChanged() { panel.drawPlaces() }
+        function onOrbitalParamsChanged() { panel.drawPlaces() }
+      }
+      // The idle flyover on this screen, setting out from this screen's place.
+      LazyLoader {
+        active: root.flying && root.orbitalActive
+
+        PanelWindow {
+          id: flyover
+          screen: panel.modelData
+          anchors { top: true; bottom: true; left: true; right: true }
+          color: "transparent"
+          WlrLayershell.namespace: "vereda-orbital-flyover"
+          WlrLayershell.layer: WlrLayer.Overlay
+          // It holds the keyboard, so the key that ends it isn't typed into a window underneath.
+          WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+          exclusionMode: ExclusionMode.Ignore
+
+          // the pointer arriving under a new window can look like a move; give it a moment
+          function touched() { if (Date.now() - root.flyingSince > 1000) root.flying = false }
+
+          Item {
+            id: flight
+            anchors.fill: parent
+            opacity: 0
+            Component.onCompleted: opacity = 1
+            Behavior on opacity { NumberAnimation { duration: 1500; easing.type: Easing.InOutQuad } }
+
+            Image {
+              anchors.fill: parent
+              source: panel.stills[panel.place] ? root.imageUrl(panel.stills[panel.place]) + "?v=" + panel.stillsVersion : ""
+              fillMode: Image.PreserveAspectCrop
+              asynchronous: true
+              cache: false
+            }
+
+            OrbitalLive {
+              id: flyoverLive
+              anchors.fill: parent
+              dpr: flyover.devicePixelRatio || 1
+              params: Scene.atPlace(root.orbitalParams || Scene.defaults, panel.place)
+              motion: (look, t) => Scene.flyoverMotion(look, t)
+              weather: root.orbitalWeatherPreview || orbitalWeather.conditions
+              running: true
+              tickMs: UPower.onBattery ? 120 : 60
+              opacity: ready ? 1 : 0.002
+              Behavior on opacity { NumberAnimation { duration: 700; easing.type: Easing.InOutQuad } }
+            }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            onPositionChanged: flyover.touched()
+            onPressed: flyover.touched()
+            onWheel: flyover.touched()
+          }
+
+          Item {
+            anchors.fill: parent
+            focus: true
+            Component.onCompleted: forceActiveFocus()
+            Keys.onPressed: flyover.touched()
+          }
+        }
+      }
+
+      Binding {
+        target: root
+        property: "orbitalPlaceInfo"
+        when: panel.modelData === Quickshell.screens[0]
+        value: ({place: panel.place, live: panel.livePlace, stills: Object.keys(panel.stills).length,
+                 drawing: studio.busy, covered: cover.up})
       }
 
       Image {

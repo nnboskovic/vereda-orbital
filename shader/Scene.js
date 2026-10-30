@@ -36,8 +36,26 @@ var defaults = {
   weather: true,   // real local weather changes the clouds, haze and wind (see weatherLook)
   ship: "GCU Still Reading The Manual",  // this machine's own ship name (notifications, the drone)
   sway: 0.6,       // slow look-around over ~26 min, degrees
-  speed: 1.0       // scene seconds per real second
+  speed: 1.0,      // scene seconds per real second
+  places: 36,      // degrees along the ring between workspaces' places; 0 puts every workspace at phi
+  flyover: 150,    // seconds without input before the idle flyover starts; 0 turns it off
+  flyoverSpeed: 0.1 // how fast it drifts on along the ring, degrees a second (about 20 km/s)
 };
+
+// Each Hyprland workspace is its own place on the Orbital, workspace 1 at the look's phi and
+// each next one `places` degrees further, so ten of them go once around the ring. The sun
+// stays where it is, so every place keeps its own local time: one hour per 15 degrees, each
+// place 2.4 hours later than the one before, and over the day the daylight moves back
+// through the workspaces, from higher numbers to lower.
+function placeOf(workspaceId) {
+  if (!(workspaceId >= 1)) return 0;    // special workspaces have no place of their own
+  return (workspaceId - 1) % 10 + 1;
+}
+
+function atPlace(p, n) {
+  if (!p.places || !(n > 1)) return p;
+  return merge(p, {phi: p.phi - p.places * (n - 1)});
+}
 
 function merge(base, over) {
   var o = {}, k;
@@ -61,8 +79,37 @@ function tanAt(phi) { return [-Math.sin(phi), Math.cos(phi), 0]; }
 // Local hour as a fraction, e.g. 14.55 for 14:33.
 function clockHour(d) { d = d || new Date(); return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600; }
 
+// The whole ring seen from above its plane, for the workspace overview's map. A camera inside
+// the ring's radius sees the inner floor all the way round, so every place shows at once, on
+// the day side or the night side. `overhead` in a look is true for this framing, or
+// {cam: [x, y, z] km, at: [x, y, z] km, fov: degrees} for another.
+var overhead = {cam: [0, -0.6 * R, 1.25 * R], at: [0, -0.2 * R, 0], fov: 80};
+
+function overheadFrame(p, t, h) {
+  var o = p.overhead === true ? overhead : p.overhead, lit = frame(merge(p, {overhead: null}), t, h);
+  var fwd = norm(sub(o.at, o.cam)), right = norm(cross(fwd, [0, 0, 1])), up = cross(right, fwd);
+  return {cam: o.cam, right: right, up: up, fwd: fwd, F: 1 / Math.tan(rad(o.fov) / 2), sun: lit.sun, dark: 0,
+          exposure: p.exposure};
+}
+
+// The idle flyover's camera at scene time t, as overrides of the look it set out from: on along
+// the ring the way it faces, rising and settling a few hundred km over a few minutes, the view
+// dipping and lifting a little with it.
+function flyoverMotion(p, t) {
+  return {phi: p.phi + p.flyoverSpeed * t,
+          alt: p.alt + 260 * Math.sin(2 * Math.PI * t / 240),
+          pitch: p.pitch + 2.5 * Math.sin(2 * Math.PI * t / 300 + 1)};
+}
+
+// Where workspace n's place sits on the screen, as [x, y] from -1 to 1 (y up), for a view.
+function placeOnScreen(p, v, n, aspect) {
+  var at = atPlace(p, n);
+  return project(v, ringPt(rad(at.phi), 0, 0), aspect);
+}
+
 // Everything the shader needs at scene time t and local hour h, as plain arrays.
 function frame(p, t, h) {
+  if (p.overhead) return overheadFrame(p, t, h);
   var phi = rad(p.phi), pos = ringPt(phi, p.alt, p.z * p.width), up = upAt(pos), tg = tanAt(phi);
   var yaw = rad(p.yaw + Math.sin(t * 0.004) * p.sway), pitch = rad(p.pitch);
   var f = rot(tg, up, yaw);
@@ -183,9 +230,10 @@ function skyPoint(v, width, x, y, aspect, alt) {
 }
 
 // --- Session lights: Claude Code sessions as ships moored in a line off the band's near edge,
-// receding round the ring toward the ribbon (slot 0 nearest).
+// receding round the ring toward the ribbon (slot 0 nearest). They're placed from wherever the
+// camera hangs, so the ships come along to every workspace's place.
 function mooring(p, k) {
-  var phi = 0.22 + 0.11 * k, alt = 300, out = 900 + 1100 * (phi - 0.22);
+  var ahead = 0.22 + 0.11 * k, phi = rad(p.phi) + ahead, alt = 300, out = 900 + 1100 * (ahead - 0.22);
   return [(R - alt) * Math.cos(phi), (R - alt) * Math.sin(phi), p.width / 2 + out];
 }
 

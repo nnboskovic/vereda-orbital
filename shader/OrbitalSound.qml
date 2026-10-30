@@ -19,7 +19,7 @@ Item {
     "theme": "theme", "theme-disco": "theme", "theme-funk": "theme", "theme-digital": "theme",
     "arrive": "ships", "needs-you": "ships", "done": "ships", "depart": "ships",
     "swept": "signals", "tight-point": "signals", "broadcast": "signals",
-    "thunder": "sky"
+    "thunder": "sky", "drift": "sky"
   })
 
   function setting(key, fallback) { return settings && settings[key] !== undefined ? settings[key] : fallback }

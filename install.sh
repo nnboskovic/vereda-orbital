@@ -18,7 +18,7 @@ ln -sf "$kit/sound/orbital-sound" "$HOME/.local/bin/orbital-sound"
 
 # The live background rides in Omarchy's own background plugin, cloned so updates leave it alone.
 [[ -d $plugin ]] || omarchy plugin clone omarchy.background
-cp "$kit/plugin/Background.qml" "$kit/shader/"{OrbitalLive.qml,OrbitalPainter.qml,OrbitalWeather.qml,OrbitalLightning.qml,OrbitalMeteors.qml,OrbitalLights.qml,OrbitalSessions.qml,OrbitalIntro.qml,OrbitalSound.qml,Scene.js,orbital.frag.qsb,flash.frag.qsb,Manrope-latin.woff2} "$plugin/"
+cp "$kit/plugin/Background.qml" "$kit/shader/"{OrbitalLive.qml,OrbitalPainter.qml,OrbitalCover.qml,OrbitalStudio.qml,OrbitalWeather.qml,OrbitalLightning.qml,OrbitalMeteors.qml,OrbitalLights.qml,OrbitalSessions.qml,OrbitalIntro.qml,OrbitalSound.qml,Scene.js,orbital.frag.qsb,flash.frag.qsb,Manrope-latin.woff2} "$plugin/"
 
 # The theme: colours, icons, the look, and the still frame the live background starts from
 # (also what the lock screen and theme picker show). Rendered at the focused monitor's size.
@@ -39,6 +39,21 @@ drone="$HOME/.config/omarchy/plugins/vereda.drone"
 mkdir -p "$drone"
 cp "$kit/drone/"{Drone.qml,manifest.json} "$kit/shader/"{Scene.js,OrbitalSessions.qml} "$drone/"
 grep -q '"vereda.drone"' "$HOME/.config/omarchy/shell.json" 2>/dev/null || omarchy plugin enable vereda.drone --section right
+
+# Workspaces as lights along an arc, the way their places lie along the Orbital: a clone of
+# Omarchy's workspace widget.
+workspaces="$HOME/.config/omarchy/plugins/$user.workspaces"
+[[ -d $workspaces ]] || omarchy plugin clone omarchy.workspaces
+cp "$kit/workspaces/Workspaces.qml" "$workspaces/"
+
+# The idle flyover replaces Omarchy's text screensaver: its timer goes to 0 (locking keeps its
+# own), and the old value is kept for revert.sh.
+shell_json="$HOME/.config/omarchy/shell.json"
+if [[ -f $shell_json ]]; then
+  saver=$(jq -r '.idle.screensaver // 150' "$shell_json")
+  [[ $saver != 0 ]] && echo "$saver" > "$kit/.previous-screensaver"
+  jq '.idle.screensaver = 0' "$shell_json" > "$shell_json.tmp" && mv "$shell_json.tmp" "$shell_json"
+fi
 
 # Notifications as Culture signal traffic: a clone of Omarchy's notifications, patched.
 notes="$HOME/.config/omarchy/plugins/$user.notifications"

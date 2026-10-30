@@ -11,9 +11,15 @@ user="${USER:-$(id -un)}"
 "$kit/hooks.py" remove
 
 omarchy theme set "$(cat "$kit/.previous-theme" 2>/dev/null || echo "Tokyo Night")"
-for plugin in "$user.background" "$user.notifications" vereda.drone; do
+for plugin in "$user.background" "$user.notifications" "$user.workspaces" vereda.drone; do
   if [[ -d $HOME/.config/omarchy/plugins/$plugin ]]; then
     omarchy plugin remove "$plugin" --yes
   fi
 done
+# Omarchy's own screensaver comes back on its old timer.
+shell_json="$HOME/.config/omarchy/shell.json"
+if [[ -f $shell_json ]]; then
+  saver=$(cat "$kit/.previous-screensaver" 2>/dev/null || echo 150)
+  jq --argjson s "$saver" '.idle.screensaver = $s' "$shell_json" > "$shell_json.tmp" && mv "$shell_json.tmp" "$shell_json"
+fi
 echo "Vereda Orbital reverted."

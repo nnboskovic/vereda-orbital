@@ -14,6 +14,9 @@ Item {
   property bool previewing: false       // a weather preview shows at once instead of easing
   property var sessions: []             // Claude Code sessions, shown as moored ships (OrbitalLights)
   property var meteorDate: null         // a preview date for the meteor calendar; null follows the clock
+  // Moves the camera from frame to frame without starting over, as the idle flyover does:
+  // function (look, sceneTime) returning overrides of the look, or null to hold still.
+  property var motion: null
   signal frameFinished()
   signal lightning()                    // a strike, for its thunder
 
@@ -86,7 +89,7 @@ Item {
     // Each frame is lit for the local hour and weather it starts in; its slices share them.
     if (slice === 0) {
       updateLook()
-      painter.params = look
+      painter.params = motion ? Scene.merge(look, motion(look, sceneTime)) : look
       painter.hour = Scene.clockHour()
     }
     painter.frameOrigin = Qt.point(0, slice * sliceH)

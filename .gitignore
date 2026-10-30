@@ -7,3 +7,4 @@ __pycache__/
 sound/out/
 sound/lab/*.wav
 sound/lab/index.html
+.previous-screensaver

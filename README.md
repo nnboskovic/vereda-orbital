@@ -79,6 +79,36 @@ two seconds. The hooks live in Claude Code's own settings, so turning them on is
 a step of its own: `./hooks.py add` (and `./hooks.py remove`). Sessions already
 running pick them up after a restart.
 
+## Places
+
+Each workspace is its own place on the Orbital (`Scene.atPlace`): workspace 1 at the look's
+`phi`, each next one `places` degrees further (36 by default, so ten go once round the ring).
+The sun is left where it is, so each place keeps its own local time, one hour per 15 degrees:
+each place is 2.4 hours later than the one before, and over the day the daylight travels
+back through the workspaces. The session ships moor off whichever place you're at.
+
+`OrbitalStudio` draws every place as a still every ten minutes (in slices, about seven seconds
+in all) into `~/.cache/vereda-orbital/places/`, plus the whole ring from above as the map
+(`Scene.overhead`). Changing workspace fades the new place's still in over half a second
+(`OrbitalCover`), the live Orbital moves there underneath and the still lifts once it's back.
+With windows open the still stays, so each workspace keeps its own place behind them, and the
+lock screen's image becomes the place you were on. `omarchy-shell orbital stills` redraws them.
+
+The bar's workspace widget is a clone of Omarchy's (`workspaces/`): lights along a gentle arc,
+bright where you are, lit where there are windows, faint where it's empty, with the number on
+hover. The workspace overview (Super+` or a palm push, in the `vereda.hands` plugin) draws the
+map with each workspace's plate inside its place on the ring; the map's `.json` says where.
+
+## Idle flyover
+
+After `flyover` seconds without input (150), a window over everything sets out from the place
+you left and drifts on along the band (`Scene.flyoverMotion`, `flyoverSpeed` degrees a second),
+at the wallpaper's own frame rate, half that on battery. The drift pad (`sound/out/drift.wav`, a
+seamless 64-second loop) fades in under it when the sky's sounds are on. A key, the mouse, or a
+hand in view with hyprhands on ends it, and so does the lock screen, which keeps Omarchy's own
+timer. Omarchy's text screensaver is turned off (its timer set to 0; `revert.sh` restores it).
+`omarchy-shell orbital flyover` starts it to have a look, and `omarchy-shell orbital land` ends it.
+
 ## Lock screen
 
 The lock screen shows a blur of the background image file, so every ten minutes
