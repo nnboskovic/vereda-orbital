@@ -156,18 +156,19 @@ Item {
   }
   Process { id: lockCopy }
 
-  // The idle flyover. After `flyover` seconds without input (Omarchy's own screensaver is off),
-  // a window over everything sets out from the place you left and drifts on along the band
-  // (Scene.flyoverMotion), with the quiet drift pad when the sky's sounds are on. A key, the
-  // mouse, or a hand in view (with hyprhands on) ends it, and so does the lock taking over.
-  readonly property int flyoverAfter: root.orbitalParams ? (root.orbitalParams.flyover || 0) : 0
-  property bool flying: false
-  property real flyingSince: 0
-  property bool flyoverWanted: false
-  onFlyingChanged: {
-    if (flying) {
-      flyingSince = Date.now()
-      flyoverHandsProbe.reload()
+  // The idle screensaver. After `screensaver` seconds without input (15 minutes; Omarchy's own
+  // text screensaver is off), a window over everything shows the place you left, the camera
+  // holding perfectly still while the light moves with the clock, as if staring at one spot on
+  // the ring, with the quiet drift pad when the sky's sounds are on. A key, the mouse, or a hand
+  // in view (with hyprhands on) ends it, and so does the lock screen taking over.
+  readonly property int screensaverAfter: root.orbitalParams ? (root.orbitalParams.screensaver || 0) : 0
+  property bool screensaverOn: false
+  property real screensaverSince: 0
+  property bool screensaverWanted: false
+  onScreensaverOnChanged: {
+    if (screensaverOn) {
+      screensaverSince = Date.now()
+      screensaverHandsProbe.reload()
       if (orbitalSound.setting("on", true) && orbitalSound.setting("sky", true) !== false) {
         driftFadeOut.stop()
         driftOut.volume = 0
@@ -176,53 +177,53 @@ Item {
         driftFadeIn.restart()
       }
     } else {
-      flyoverHands.connected = false
+      screensaverHands.connected = false
       driftFadeIn.stop()
       if (driftPad.playbackState === MediaPlayer.PlayingState) driftFadeOut.restart()
     }
   }
-  function startFlyover() {
-    if (!root.orbitalActive || root.flying) return
-    root.flyoverWanted = true
+  function startScreensaver() {
+    if (!root.orbitalActive || root.screensaverOn) return
+    root.screensaverWanted = true
     if (!lockCheck.running) lockCheck.running = true
   }
   IdleMonitor {
-    enabled: root.orbitalActive && root.flyoverAfter > 0
+    enabled: root.orbitalActive && root.screensaverAfter > 0
     respectInhibitors: true
-    timeout: Math.max(1, root.flyoverAfter)
-    onIsIdleChanged: isIdle ? root.startFlyover() : (root.flying = false)
+    timeout: Math.max(1, root.screensaverAfter)
+    onIsIdleChanged: isIdle ? root.startScreensaver() : (root.screensaverOn = false)
   }
-  // Not over the lock screen: check before setting out, and every few seconds while flying.
+  // Not over the lock screen: check before it comes up, and every few seconds while it shows.
   Process {
     id: lockCheck
     command: ["omarchy-shell", "-q", "lock", "isLocked"]
     stdout: StdioCollector {
       onStreamFinished: {
         var locked = String(text || "").trim() === "true"
-        if (locked) root.flying = false
-        else if (root.flyoverWanted) root.flying = true
-        root.flyoverWanted = false
+        if (locked) root.screensaverOn = false
+        else if (root.screensaverWanted) root.screensaverOn = true
+        root.screensaverWanted = false
       }
     }
   }
-  Timer { interval: 3000; repeat: true; running: root.flying; onTriggered: if (!lockCheck.running) lockCheck.running = true }
+  Timer { interval: 3000; repeat: true; running: root.screensaverOn; onTriggered: if (!lockCheck.running) lockCheck.running = true }
   // A hand in view ends it, when hyprhands is running (its socket is there: a socket isn't a
   // regular file, so finding it reads as NotAFile).
   FileView {
-    id: flyoverHandsProbe
+    id: screensaverHandsProbe
     path: Quickshell.env("XDG_RUNTIME_DIR") + "/hyprhands.sock"
     printErrors: false
-    onLoadFailed: error => { if (root.flying && error !== FileViewError.FileNotFound) flyoverHands.connected = true }
+    onLoadFailed: error => { if (root.screensaverOn && error !== FileViewError.FileNotFound) screensaverHands.connected = true }
   }
   Socket {
-    id: flyoverHands
-    path: flyoverHandsProbe.path
-    onConnectedChanged: if (connected) { write('{"role":"flyover"}\n'); flush() }
+    id: screensaverHands
+    path: screensaverHandsProbe.path
+    onConnectedChanged: if (connected) { write('{"role":"screensaver"}\n'); flush() }
     parser: SplitParser {
       onRead: line => {
         try {
           var m = JSON.parse(line)
-          if (m.hands && m.hands.length && Date.now() - root.flyingSince > 1500) root.flying = false
+          if (m.hands && m.hands.length && Date.now() - root.screensaverSince > 1500) root.screensaverOn = false
         } catch (e) {}
       }
     }
@@ -259,9 +260,10 @@ Item {
     // omarchy-shell orbital stills draws every workspace's place again now.
     function stills(): void { root.orbitalStillsRequests++ }
 
-    // omarchy-shell orbital flyover starts the idle flyover now, to see it; any key or the mouse ends it.
-    function flyover(): void { root.startFlyover() }
-    function land(): void { root.flying = false }
+    // omarchy-shell orbital screensaver brings the idle screensaver up now, to see it; any key or
+    // the mouse ends it, as does omarchy-shell orbital wake.
+    function screensaver(): void { root.startScreensaver() }
+    function wake(): void { root.screensaverOn = false }
 
     // omarchy-shell orbital meteors geminids previews a shower at its peak; '' goes back to tonight.
     function meteors(name: string): void {
@@ -609,23 +611,23 @@ Item {
         function onOrbitalStillsRequestsChanged() { panel.drawPlaces() }
         function onOrbitalParamsChanged() { panel.drawPlaces() }
       }
-      // The idle flyover on this screen, setting out from this screen's place.
+      // The idle screensaver on this screen: this screen's place, held still.
       LazyLoader {
-        active: root.flying && root.orbitalActive
+        active: root.screensaverOn && root.orbitalActive
 
         PanelWindow {
-          id: flyover
+          id: saver
           screen: panel.modelData
           anchors { top: true; bottom: true; left: true; right: true }
           color: "transparent"
-          WlrLayershell.namespace: "vereda-orbital-flyover"
+          WlrLayershell.namespace: "vereda-orbital-screensaver"
           WlrLayershell.layer: WlrLayer.Overlay
           // It holds the keyboard, so the key that ends it isn't typed into a window underneath.
           WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
           exclusionMode: ExclusionMode.Ignore
 
           // the pointer arriving under a new window can look like a move; give it a moment
-          function touched() { if (Date.now() - root.flyingSince > 1000) root.flying = false }
+          function touched() { if (Date.now() - root.screensaverSince > 1000) root.screensaverOn = false }
 
           Item {
             id: flight
@@ -643,11 +645,11 @@ Item {
             }
 
             OrbitalLive {
-              id: flyoverLive
+              id: saverLive
               anchors.fill: parent
-              dpr: flyover.devicePixelRatio || 1
-              params: Scene.atPlace(root.orbitalParams || Scene.defaults, panel.place)
-              motion: (look, t) => Scene.flyoverMotion(look, t)
+              dpr: saver.devicePixelRatio || 1
+              // no slow look-around either: the camera stays put and only the light moves
+              params: Scene.merge(Scene.atPlace(root.orbitalParams || Scene.defaults, panel.place), {sway: 0})
               weather: root.orbitalWeatherFor(panel.place)
               storms: root.orbitalStorms
               running: true
@@ -660,16 +662,16 @@ Item {
           MouseArea {
             anchors.fill: parent
             hoverEnabled: true
-            onPositionChanged: flyover.touched()
-            onPressed: flyover.touched()
-            onWheel: flyover.touched()
+            onPositionChanged: saver.touched()
+            onPressed: saver.touched()
+            onWheel: saver.touched()
           }
 
           Item {
             anchors.fill: parent
             focus: true
             Component.onCompleted: forceActiveFocus()
-            Keys.onPressed: flyover.touched()
+            Keys.onPressed: saver.touched()
           }
         }
       }

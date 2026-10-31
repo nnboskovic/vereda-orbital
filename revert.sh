@@ -16,6 +16,14 @@ for plugin in "$user.background" "$user.notifications" "$user.workspaces" vereda
     omarchy plugin remove "$plugin" --yes
   fi
 done
+
+# --- vereda-weather ---------------------------------------------------------------------------
+# The weather simulation stops (saving its state) and its service goes; the venv and the maps
+# in ~/.cache/vereda-orbital/weather/ stay, so installing again picks the weather up where it was.
+systemctl --user disable --now --quiet vereda-weather.service 2>/dev/null || true
+rm -f "$HOME/.local/share/systemd/user/vereda-weather.service"
+systemctl --user daemon-reload
+# --- end vereda-weather -----------------------------------------------------------------------
 # Omarchy's own screensaver comes back on its old timer.
 shell_json="$HOME/.config/omarchy/shell.json"
 if [[ -f $shell_json ]]; then

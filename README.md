@@ -53,9 +53,11 @@ form where air saturates, rain out, and build into storms over warm land and sea
 spins about its own axis, so the Coriolis force never turns the wind sideways along the floor:
 there are no cyclones, and the weather organises itself round the travelling heat instead, with
 sea breezes, afternoon storms, dawn fog and cloud streets lined up with the wind. Every few
-minutes it writes two maps of the band to `~/.cache/vereda-orbital/weather/` (`weather.png`:
-low cloud, high cloud, how convective, rain; `wind.png`: wind along and across, sea fog,
-thunderstorms) and a `status.json` summing up each workspace's place and listing the storms.
+minutes it writes three maps of the band to `~/.cache/vereda-orbital/weather/`, all opaque
+because Qt premultiplies alpha (`weather.png`: low cloud, high cloud, how convective;
+`wind.png`: wind along and across, sea fog; `wet.png`: rain, thunderstorms), a `status.json`
+summing up each workspace's place and listing the storms, and `traffic.json` with the aircraft.
+`weather/sim.py --status` prints the weather and traffic at every place.
 The land it runs on is drawn by the shader itself (`weather/landmap.sh`), so it matches the
 drawn land exactly.
 
@@ -83,6 +85,27 @@ Preview a real-weather touch at home (cloud cover itself comes from the simulati
     omarchy-shell orbital weather '{"code":95,"precip":8,"wind":40}'
     omarchy-shell orbital weather ''
     omarchy-shell orbital status
+
+## Life on the band
+
+Towns light up one by one as dusk passes over them, each waiting for its own depth of twilight,
+so a wave of lights trails the edge of night round the ring. Through the night they keep to the
+hour: all of them in the evening, thinning after ten to the cities that never sleep, picking up
+again from three toward dawn, each place by its own local time. Cities have warm cores and paler
+outskirts, harbours string along the coasts, rain dims them, and their light glows up through
+thin cloud. Ships sail eight lanes round the ring at 30 to 50 km/h by the clock; by day their
+wakes open into a 19.5-degree V where the sun glints off the water, and at night they are faint
+moving lights.
+
+The weather simulation also flies the air traffic (`weather/traffic.py`): jets at 10 km and
+airships low down, between 175 airports at the cities the shader draws (`towns.png`, rendered
+like the land map), departing by each airport's local hour, so the sky is busiest in the evening
+and quiet late at night, at true speeds. Crews look out for storms every five minutes and route
+round them. `OrbitalTraffic` draws them over the wallpaper, carried on along their headings
+between updates: small lights at night, some with a blinking beacon, and by day the jets'
+contrails, faint soft hairlines that spread and fade over a quarter of an hour. Where the air
+aloft is moist enough the simulation lays their ice into its high cloud, so busy corridors keep
+a faint lasting haze of cirrus.
 
 ## Session lights
 
@@ -117,15 +140,16 @@ bright where you are, lit where there are windows, faint where it's empty, with 
 hover. The workspace overview (Super+` or a palm push, in the `vereda.hands` plugin) draws the
 map with each workspace's plate inside its place on the ring; the map's `.json` says where.
 
-## Idle flyover
+## Idle screensaver
 
-After `flyover` seconds without input (150), a window over everything sets out from the place
-you left and drifts on along the band (`Scene.flyoverMotion`, `flyoverSpeed` degrees a second),
-at the wallpaper's own frame rate, half that on battery. The drift pad (`sound/out/drift.wav`, a
-seamless 64-second loop) fades in under it when the sky's sounds are on. A key, the mouse, or a
-hand in view with hyprhands on ends it, and so does the lock screen, which keeps Omarchy's own
-timer. Omarchy's text screensaver is turned off (its timer set to 0; `revert.sh` restores it).
-`omarchy-shell orbital flyover` starts it to have a look, and `omarchy-shell orbital land` ends it.
+After `screensaver` seconds without input (900, a quarter of an hour), a window over everything
+shows the place you left with the camera held perfectly still, not even the wallpaper's slow
+look-around, while the light moves with the clock: like staring at one spot on the ring as the
+day goes by. The drift pad (`sound/out/drift.wav`, a seamless 64-second loop) fades in under it
+when the sky's sounds are on. A key, the mouse, or a hand in view with hyprhands on ends it,
+and so does the lock screen, which keeps Omarchy's own timer. Omarchy's text screensaver is
+turned off (its timer set to 0; `revert.sh` restores it). `omarchy-shell orbital screensaver`
+brings it up to have a look, and `omarchy-shell orbital wake` ends it.
 
 ## Lock screen
 

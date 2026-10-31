@@ -38,14 +38,17 @@ layout(std140, binding = 0) uniform buf {
   float uFlash;
   float uMode;      // 0 draws the Orbital; 1 draws the land map the weather simulation runs on
   float uHasSky;    // 1 once the weather simulation's maps are in uSky and uAir
+  float uClock;     // seconds by the clock, over a week: ships keep sailing across frames and places
 };
 
 // The weather simulation's maps (weather/sim.py): the band unrolled, 3016 x 104 cells of 25 km,
-// wrapping round the ring. uSky: low cloud, high cloud, how convective the low cloud is (flat
-// sheets at 0, towering cumulonimbus at 1), rain. uAir: the wind along and across the band (0.5
-// is calm), sea fog, thunderstorms.
+// wrapping round the ring, all opaque (Qt premultiplies alpha, so it can't carry data). uSky:
+// low cloud, high cloud, how convective the low cloud is (flat sheets at 0, towering
+// cumulonimbus at 1). uAir: the wind along and across the band (0.5 is calm), sea fog. uWet:
+// rain, thunderstorms.
 layout(binding = 1) uniform sampler2D uSky;
 layout(binding = 2) uniform sampler2D uAir;
+layout(binding = 3) uniform sampler2D uWet;
 
 #define W uW
 const float R = 12000.0, HA = 170.0, HC = 10.0, HW = 190.0, HUB = 140.0;
@@ -113,13 +116,17 @@ vec2 skyUV(vec3 p) { return vec2(atan(p.y, p.x) / (2.0 * PI), p.z / W + 0.5); }
 
 // The weather over a point: from the simulation's maps, or without them a procedural stand-in
 // of broad cloudy regions, some of them convective, with high wisps.
+// skyAt: low, high, convective, rain. airAt: wind along, across, fog, thunderstorms.
 vec4 skyAt(vec3 p) {
-  if (uHasSky > 0.5) return texture(uSky, skyUV(p));
+  if (uHasSky > 0.5) { vec2 uv = skyUV(p); return vec4(texture(uSky, uv).rgb, texture(uWet, uv).r); }
   float big = gfbm(p / 900.0, 0.0, 3), mid = gfbm(p / 260.0 + 3.1, 0.0, 3);
   return vec4(smoothstep(0.45, 0.85, big * 0.7 + mid * 0.4), smoothstep(0.55, 0.85, gfbm(p / 700.0 + 9.7, 0.0, 3)),
               smoothstep(0.45, 0.8, mid), 0.0);
 }
-vec4 airAt(vec3 p) { return uHasSky > 0.5 ? texture(uAir, skyUV(p)) : vec4(0.55, 0.5, 0.0, 0.0); }
+vec4 airAt(vec3 p) {
+  if (uHasSky > 0.5) { vec2 uv = skyUV(p); return vec4(texture(uAir, uv).rgb, texture(uWet, uv).g); }
+  return vec4(0.55, 0.5, 0.0, 0.0);
+}
 
 // Cells, for cumulus and the honeycomb of stratocumulus: the distances to the nearest and the
 // second nearest of one jittered point per cell, on the band unrolled (along the ring, across
@@ -141,9 +148,9 @@ vec2 cells(vec3 p, float size) {
 }
 
 // Low cloud at q on its deck: the map's cover, given the shape of its kind. Flat sheets and fog
-// are smooth; stratocumulus is rounded cells pressed together with clear gaps between them;
-// cumulus is popcorn a few km across, gathered in clumps; storm towers are great rounded heads.
-// A fine detail frays every edge, so nothing ends in a clean curve or a straight line.
+// are smooth; stratocumulus is a sheet made lumpy by its cells, dimpled where they meet;
+// cumulus is clumps of popcorn a few km across, a soft speckle from this height; storm towers
+// are great rounded heads. Edges are soft and frayed, so nothing ends in a clean curve or line.
 // Far away the shapes blur into their mean cover. `thick` is how tall the cloud stands, km.
 float lowCloud(vec3 q, float fp, vec4 sky, vec4 air, out float thick) {
   float fog = air.b, cover = max(sky.r, fog), conv = sky.b * (1.0 - fog);
@@ -155,20 +162,20 @@ float lowCloud(vec3 q, float fp, vec4 sky, vec4 air, out float thick) {
   float wCu = smoothstep(0.45, 0.65, conv) * (1.0 - smoothstep(0.8, 0.95, conv));
   float wTower = smoothstep(0.8, 0.95, conv);
   if (wComb > 0.01) {
-    vec2 c = cells(q, 26.0);
-    n = mix(n, (1.0 - smoothstep(0.25, 0.85, c.x)) * 0.55 + smoothstep(0.0, 0.35, c.y - c.x) * 0.15 + sheet * 0.4, wComb);
+    vec2 c = cells(q, 24.0);
+    n = mix(n, sheet * 0.72 + (0.62 - smoothstep(0.15, 0.95, c.x)) * 0.3, wComb);
   }
   if (wCu > 0.01) {
-    vec2 c = cells(q, 4.5);
     float clump = gfbm(q / 40.0 + 3.3, fp / 40.0, 3);
-    n = mix(n, (1.0 - c.x * 1.15) * 0.6 + clump * 0.55, wCu);
+    float pop = fp < 9.0 ? 0.55 - cells(q, 4.5).x * 0.6 : 0.0;   // smaller than a pixel: only its average
+    n = mix(n, clump * 0.8 + pop * (1.0 - clamp(fp / 9.0, 0.0, 1.0)) * 0.45 + 0.05, wCu);
   }
   if (wTower > 0.01) {
     vec2 c = cells(q, 32.0);
     n = mix(n, 1.1 - c.x + (gfbm(q / 7.0, fp / 7.0, 4) - 0.5) * 0.45, wTower);
   }
   n += (gfbm(q / 3.5 + 11.0, fp / 3.5, 3) - 0.5) * 0.22;   // frayed edges
-  float edge = mix(0.16, 0.08, conv);
+  float edge = mix(0.24, 0.13, conv);
   float d = smoothstep(1.0 - cover - edge, 1.0 - cover + edge, n);
   d = mix(d, cover, clamp(fp / 10.0 - 0.3, 0.0, 1.0) * (1.0 - wTower));
   thick = mix(0.4, 2.0, d) + conv * conv * d * 10.0;
@@ -209,7 +216,61 @@ float landAt(vec3 p, float fp, out float cont, out float det) {
   return smoothstep(uLand, uLand + 0.015, cont + det * 0.06);
 }
 
-vec3 ground(vec3 p, vec3 rd, float t, float fp) {
+// The local solar hour at a point on the floor: noon where the sun stands overhead.
+float localHour(vec3 p) {
+  float th = atan(uSun.y, uSun.x), ph = atan(p.y, p.x);
+  return mod(12.0 + (th - ph - PI) * 12.0 / PI, 24.0);
+}
+
+// How much of a place's night life is out at its hour: all of it through the evening, thinning
+// after ten to the cities that never sleep, picking up again from three toward dawn.
+float nightLife(float hr) {
+  float h = mod(hr - 12.0, 24.0);          // hours since noon
+  if (h < 10.0) return 1.0;
+  if (h < 15.0) return mix(1.0, 0.35, smoothstep(10.0, 15.0, h));
+  return mix(0.35, 0.8, smoothstep(15.0, 17.5, h));
+}
+
+// Where people live: towns gather in clusters, densest in the cities, and string along the
+// coasts as harbours; out at sea, fewer, the floating towns.
+float townDensity(vec3 p, float fp, float land, float cont, float det) {
+  float dens = smoothstep(0.6, 0.78, fbm(p / 150.0, fp / 150.0, 4));
+  float coast = 1.0 - smoothstep(0.0, 0.012, abs(cont + det * 0.06 - uLand));
+  dens = max(dens, coast * 0.8 * smoothstep(0.42, 0.62, fbm(p / 60.0 + 5.0, fp / 60.0, 3)));
+  return dens * mix(0.45, 1.0, land);
+}
+
+// Ships on the shipping lanes: eight lanes run along the ring at their own places across the
+// band, a ship every few hundred km on each (a whole number of them round the ring, so the
+// lanes close on themselves), sailing at 30 to 50 km/h by the clock. Each leaves a V of wake
+// 35 km long, the arms at the 19.5 degrees every ship's wake opens to, with a churned line down
+// the middle; at night it is a faint moving light. Wakes under a km wide fade into the water
+// from afar, as they do from orbit.
+void shipping(vec3 p, float fp, out float wake, out float light) {
+  wake = 0.0; light = 0.0;
+  float a = atan(p.y, p.x) * R;
+  for (int j = 0; j < 8; j++) {
+    float fj = float(j), y = p.z - (h3(vec3(fj, 2.2, 9.1)) - 0.5) * 2200.0;
+    if (abs(y) > 40.0) continue;
+    float N = floor(2.0 * PI * R / (350.0 + 350.0 * h3(vec3(fj, 3.3, 9.1)))), L = 2.0 * PI * R / N;
+    float dir = h3(vec3(fj, 5.5, 9.1)) < 0.5 ? -1.0 : 1.0, v = (0.008 + 0.006 * h3(vec3(fj, 4.4, 9.1))) * dir;
+    float s = a - v * uClock, k0 = floor(s / L);
+    for (int dk = -1; dk <= 1; dk++) {
+      float k = k0 + float(dk), kk = mod(k, N);
+      float x = (s - (k + 0.2 + 0.6 * h3(vec3(kk, fj, 6.6))) * L) * dir;      // ahead of the ship, km
+      float yy = y - (h3(vec3(kk, fj, 7.7)) - 0.5) * 16.0;
+      if (x < 0.0 && x > -35.0) {
+        float db = -x, arm = abs(yy) - db * 0.354, wd = 0.5 + db * 0.04;
+        wake = max(wake, (exp(-arm * arm / (wd * wd)) * 0.7 + exp(-yy * yy / 0.3) * exp(-db / 6.0)) * exp(-db / 16.0));
+      }
+      float r = max(fp, 0.6);
+      light = max(light, exp(-(x * x + yy * yy) / (r * r)) * min(1.0, 0.36 / (r * r)));
+    }
+  }
+  wake *= clamp(1.2 / fp, 0.0, 1.0);
+}
+
+vec3 ground(vec3 p, vec3 rd, float t, float fp, out vec3 lights) {
   vec3 n = upAt(p); float mu = dot(n, uSun); float sh = ringShadow(p + n * 0.5);
   float cont, det; float land = landAt(p, fp, cont, det);
   vec3 ocean = mix(uDeep, uSea, smoothstep(0.4, 0.53, cont) * (0.7 + 0.3 * det));
@@ -230,27 +291,35 @@ vec3 ground(vec3 p, vec3 rd, float t, float fp) {
   // sun glint on water
   vec3 hv = normalize(uSun - rd); float sp = pow(max(dot(n, hv), 0.0), 180.0) * (1.0 - land) * (1.0 - cs);
   col += E * sp * 0.6;
-  // night lights where it is dark
-  float night = rs(0.05, -0.15, mu * sh + (sh - 1.0) * 0.2);
-  if (night > 0.0 && uLights > 0.0) {
-    // towns, ashore and afloat: where people live, then at most one light per 9 km cell,
-    // drawn at least a pixel wide so it does not sparkle, its brightness spread as it shrinks,
-    // turning into the same average glow once cells are smaller than pixels
-    float dens = smoothstep(0.6, 0.78, fbm(p / 150.0, fp / 150.0, 4));
+  // ships: their wakes where the sun glints off the water, their lights at night
+  float dusk = mu * sh + (sh - 1.0) * 0.2;                 // how far the sun is up here (< 0: down)
+  float wake, shipLight; shipping(p, fp, wake, shipLight);
+  col += E * (pow(max(dot(n, hv), 0.0), 40.0) * 0.3 + 0.004) * wake * (1.0 - land);
+  lights = vec3(1.0, 0.85, 0.65) * shipLight * (1.0 - land) * smoothstep(-0.02, -0.1, dusk) * uLights * 2.0;
+  // towns light up one by one as dusk passes over them, each waiting for its own depth of
+  // twilight; through the night they keep to the hour (nightLife), the small ones going dark
+  // after ten while the cities stay lit; rain dims them. One light per 9 km cell at most, drawn
+  // at least a pixel wide so it doesn't sparkle, its brightness spread as it shrinks, turning
+  // into the same average glow once cells are smaller than pixels.
+  if (dusk < 0.06 && uLights > 0.0) {
+    float dens = townDensity(p, fp, land, cont, det);
     if (dens > 0.0) {
+      float life = nightLife(localHour(p)), rain = skyAt(p).a;
       vec2 bp = vec2(atan(p.y, p.x) * R, p.z) / 9.0;
       vec2 id = floor(bp), f = fract(bp) - 0.5;
-      float h = h3(vec3(id, 3.7));
+      float h = h3(vec3(id, 3.7)), rank = h3(vec3(id, 7.7)), wait = 0.02 + 0.16 * h3(vec3(id, 8.8));
       vec2 off = (vec2(h3(vec3(id, 1.3)), h3(vec3(id, 2.9))) - 0.5) * 0.7;
       float rad = max(fp, 0.8) / 9.0, d = length(f - off);
-      float bright = 0.25 + 1.5 * pow(h3(vec3(id, 7.7)), 3.0);
-      float pt = step(1.0 - dens * 0.45, h) * bright * exp(-d * d / (rad * rad)) * min(1.0, 0.012 / (rad * rad));
-      float glow = dens * 0.45 * 0.625 * 0.0377;
+      float on = smoothstep(0.02 - wait, -0.02 - wait, dusk) * smoothstep(1.0 - life - 0.05, 1.0 - life + 0.05, rank * 0.7 + dens * 0.5);
+      float pt = step(1.0 - dens * 0.45, h) * (0.25 + 1.5 * pow(rank, 3.0)) * on * exp(-d * d / (rad * rad)) * min(1.0, 0.012 / (rad * rad));
+      float glow = dens * 0.45 * 0.625 * 0.0377 * smoothstep(0.0, -0.12, dusk) * mix(0.45, 1.0, life);
       float far = clamp(fp / 9.0 * 2.0 - 0.6, 0.0, 1.0);
-      vec3 hue = mix(vec3(1.0, 0.66, 0.34), vec3(0.85, 0.92, 1.0), step(0.82, h3(vec3(id, 5.1))));
-      col += hue * mix(pt, glow, far) * night * uLights * 5.0;
+      // warm city cores, paler outskirts, the odd cool light
+      vec3 hue = mix(vec3(1.0, 0.66, 0.34), vec3(0.85, 0.92, 1.0), max(smoothstep(0.8, 0.5, dens) * 0.45, step(0.86, h3(vec3(id, 5.1)))));
+      lights += hue * mix(pt, glow, far) * uLights * 5.0 * (1.0 - 0.45 * rain);
     }
   }
+  col += lights;
   return col;
 }
 
@@ -322,6 +391,10 @@ void landMap() {
   float phi = px.x / uRes.x * 2.0 * PI, z = (px.y / uRes.y - 0.5) * W;
   vec3 p = vec3(R * cos(phi), R * sin(phi), z);
   float cont, det; float land = landAt(p, 2.0 * PI * R / uRes.x, cont, det);
+  if (uMode > 1.5) {   // mode 2: where people live, for the simulation's air routes between the cities
+    fragColor = vec4(townDensity(p, 2.0 * PI * R / uRes.x, land, cont, det), land, 0.0, 1.0);
+    return;
+  }
   fragColor = vec4(land, clamp(cont, 0.0, 1.0), clamp(det, 0.0, 1.0), 1.0);
 }
 
@@ -340,7 +413,7 @@ void main() {
   vec3 p = ro + rd * tHit; float fp = tHit * pix;
   if (kind == 0) { col = stars(rd); }
   else if (kind == 1) {
-    col = ground(p, rd, tHit, fp);
+    vec3 lightsBelow; col = ground(p, rd, tHit, fp, lightsBelow);
     vec3 qL = ro + rd * cyl(ro, rd, R - LOWC).y, qH = ro + rd * cyl(ro, rd, R - HIGHC).y;
     vec4 sky = skyAt(qL), air = airAt(qL);
     float thick; float dL = lowCloud(qL, fp, sky, air, thick), dH = highCloud(qH, fp, sky, air);
@@ -348,7 +421,9 @@ void main() {
       vec3 n = upAt(qL); float mu = dot(n, uSun);
       vec3 ts = normalize(uSun - n * mu + vec3(1e-4));
       float tt; float toward = lowCloud(qL + ts * min(30.0, (1.0 + thick) / max(mu, 0.2)), fp, sky, air, tt);
-      col = mix(col, cloudLight(qL, rd, dL, thick, 1.0 - 0.35 * dH, dL * thick - toward * tt, sky.a), dL);
+      vec3 cc = cloudLight(qL, rd, dL, thick, 1.0 - 0.35 * dH, dL * thick - toward * tt, sky.a);
+      cc += lightsBelow * exp(-dL * thick * 0.6) * 0.8;   // town light glowing up through thin cloud
+      col = mix(col, cc, dL);
     }
     if (dH > 0.003) col = mix(col, cloudLight(qH, rd, dH, 0.8, 1.0, 0.0, 0.0) * vec3(0.97, 0.99, 1.02), dH * 0.85);
   }

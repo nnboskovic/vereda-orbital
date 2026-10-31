@@ -1,0 +1,22 @@
+# The Vereda Orbital's weather, a step a minute for the wallpaper's clouds (weather/sim.py).
+# install.sh fills in @KIT@ and puts this in ~/.local/share/systemd/user/.
+[Unit]
+Description=Vereda Orbital weather simulation
+
+[Service]
+Type=simple
+ExecStart=@KIT@/weather/.venv/bin/python @KIT@/weather/sim.py
+Restart=on-failure
+RestartSec=60
+# Weather can wait: it yields the CPU and the disk to anything you are doing.
+Nice=10
+CPUWeight=20
+IOWeight=20
+MemoryMax=400M
+# Long enough to save the state on the way out.
+TimeoutStopSec=30
+# numpy's elementwise work is single-threaded anyway; this keeps BLAS from idling eleven threads.
+Environment=PYTHONUNBUFFERED=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+
+[Install]
+WantedBy=default.target

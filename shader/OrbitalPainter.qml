@@ -45,10 +45,13 @@ ShaderEffect {
   property vector3d uBolt: Qt.vector3d(0, 0, 0)    // lightning only
   property real uBoltR: 100
   property real uFlash: 0
-  property real uMode: params.mapMode || 0         // 1 draws the land map for the weather simulation
+  property real uMode: params.mapMode || 0         // 1 draws the land map for the weather simulation, 2 its towns
+  // seconds by the clock over a week, for the ships; the live Orbital sets it at each frame's start
+  property real clock: (Date.now() / 1000) % 604800
+  property real uClock: clock
 
-  // The weather simulation's maps (weather/sim.py), as textures that wrap round the ring. Each
-  // new pair loads into the spare slot while the other stays in use; the live Orbital takes it
+  // The weather simulation's maps (weather/sim.py), as textures that wrap round the ring:
+  // weather.png, wind.png and wet.png, all opaque. Each new set loads into the spare slot while the other stays in use; the live Orbital takes it
   // up only at the start of a frame (latchSky), so one frame's slices never mix two maps, and
   // anything else takes it up as soon as it has loaded.
   property bool latchMaps: false
@@ -59,11 +62,15 @@ ShaderEffect {
   property real askedAt: 0
   readonly property var skyImages: [sky0, sky1]
   readonly property var airImages: [air0, air1]
-  function pairReady(k) { return skyImages[k].status === Image.Ready && airImages[k].status === Image.Ready }
+  readonly property var wetImages: [wet0, wet1]
+  function pairReady(k) {
+    return skyImages[k].status === Image.Ready && airImages[k].status === Image.Ready && wetImages[k].status === Image.Ready
+  }
   readonly property bool hasSky: pairReady(slot)
   property real uHasSky: hasSky ? 1 : 0
   property var uSky: slot === 0 ? skyTex0 : skyTex1
   property var uAir: slot === 0 ? airTex0 : airTex1
+  property var uWet: slot === 0 ? wetTex0 : wetTex1
 
   // Swaps to the newest maps if they have loaded. Returns false while a first pair is still
   // on its way, so a frame doesn't start without weather it could have had.
@@ -76,6 +83,7 @@ ShaderEffect {
     var k = 1 - slot, v = "?v=" + mapsVersion
     skyImages[k].source = "file://" + skyDir + "weather.png" + v
     airImages[k].source = "file://" + skyDir + "wind.png" + v
+    wetImages[k].source = "file://" + skyDir + "wet.png" + v
     waitingSwap = true
     askedAt = Date.now()
   }
@@ -94,10 +102,14 @@ ShaderEffect {
   Image { id: sky1; cache: false; asynchronous: true; smooth: true; onStatusChanged: fx.mapLoaded() }
   Image { id: air0; cache: false; asynchronous: true; smooth: true; onStatusChanged: fx.mapLoaded() }
   Image { id: air1; cache: false; asynchronous: true; smooth: true; onStatusChanged: fx.mapLoaded() }
+  Image { id: wet0; cache: false; asynchronous: true; smooth: true; onStatusChanged: fx.mapLoaded() }
+  Image { id: wet1; cache: false; asynchronous: true; smooth: true; onStatusChanged: fx.mapLoaded() }
   ShaderEffectSource { id: skyTex0; sourceItem: sky0; hideSource: true; visible: false; textureSize: Qt.size(3016, 104); wrapMode: ShaderEffectSource.Repeat; mipmap: true }
   ShaderEffectSource { id: skyTex1; sourceItem: sky1; hideSource: true; visible: false; textureSize: Qt.size(3016, 104); wrapMode: ShaderEffectSource.Repeat; mipmap: true }
   ShaderEffectSource { id: airTex0; sourceItem: air0; hideSource: true; visible: false; textureSize: Qt.size(3016, 104); wrapMode: ShaderEffectSource.Repeat; mipmap: true }
   ShaderEffectSource { id: airTex1; sourceItem: air1; hideSource: true; visible: false; textureSize: Qt.size(3016, 104); wrapMode: ShaderEffectSource.Repeat; mipmap: true }
+  ShaderEffectSource { id: wetTex0; sourceItem: wet0; hideSource: true; visible: false; textureSize: Qt.size(3016, 104); wrapMode: ShaderEffectSource.Repeat; mipmap: true }
+  ShaderEffectSource { id: wetTex1; sourceItem: wet1; hideSource: true; visible: false; textureSize: Qt.size(3016, 104); wrapMode: ShaderEffectSource.Repeat; mipmap: true }
 
   blending: false
   fragmentShader: Qt.resolvedUrl(shaderFile)

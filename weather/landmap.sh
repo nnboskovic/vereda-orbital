@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Renders the land map the weather simulation runs on, with the wallpaper's own shader so the
-# simulation's land and sea are exactly the drawn ones: the band unrolled to 3016 x 104 cells of
-# 25 km (red land, green the continents' height, blue fine detail), drawn at about twice that
-# and averaged down.   landmap.sh [out.png]
+# Renders the maps the weather simulation runs on, with the wallpaper's own shader so they are
+# exactly what's drawn: the band unrolled to 3016 x 104 cells of 25 km, drawn at about twice that
+# and averaged down. land.png: red land, green the continents' height, blue fine detail.
+# towns.png beside it: red where people live (the cities the air routes join), green land.
+#   landmap.sh [land.png]
 set -euo pipefail
 kit="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-$HOME/.cache/vereda-orbital/weather/land.png}"
@@ -14,4 +15,8 @@ look="$(dirname "$(readlink -f "$HOME/.local/state/omarchy/current/background" 2
 [[ -f $look ]] || look="$kit/theme/look.json"
 "$kit/render-still.sh" "$big" 4024 140 "$(jq -c '. + {mapMode: 1}' "$look")" >/dev/null
 "$kit/weather/.venv/bin/python" "$kit/weather/resize.py" "$big" "$out" 3016 104
+towns="$(dirname "$out")/towns.png"
+"$kit/render-still.sh" "$big" 4024 140 "$(jq -c '. + {mapMode: 2}' "$look")" >/dev/null
+"$kit/weather/.venv/bin/python" "$kit/weather/resize.py" "$big" "$towns" 3016 104
 echo "$out"
+echo "$towns"

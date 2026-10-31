@@ -18,7 +18,7 @@ ln -sf "$kit/sound/orbital-sound" "$HOME/.local/bin/orbital-sound"
 
 # The live background rides in Omarchy's own background plugin, cloned so updates leave it alone.
 [[ -d $plugin ]] || omarchy plugin clone omarchy.background
-cp "$kit/plugin/Background.qml" "$kit/shader/"{OrbitalLive.qml,OrbitalPainter.qml,OrbitalCover.qml,OrbitalStudio.qml,OrbitalWeather.qml,OrbitalLightning.qml,OrbitalMeteors.qml,OrbitalLights.qml,OrbitalSessions.qml,OrbitalIntro.qml,OrbitalSound.qml,Scene.js,orbital.frag.qsb,flash.frag.qsb,Manrope-latin.woff2} "$plugin/"
+cp "$kit/plugin/Background.qml" "$kit/shader/"{OrbitalLive.qml,OrbitalPainter.qml,OrbitalCover.qml,OrbitalStudio.qml,OrbitalTraffic.qml,OrbitalWeather.qml,OrbitalLightning.qml,OrbitalMeteors.qml,OrbitalLights.qml,OrbitalSessions.qml,OrbitalIntro.qml,OrbitalSound.qml,Scene.js,orbital.frag.qsb,flash.frag.qsb,Manrope-latin.woff2} "$plugin/"
 
 # The theme: colours, icons, the look, and the still frame the live background starts from
 # (also what the lock screen and theme picker show). Rendered at the focused monitor's size.
@@ -67,6 +67,29 @@ mkdir -p "$HOME/.cache/vereda-orbital"
 [[ -s $HOME/.cache/vereda-orbital/sessions.json ]] || echo '{}' >"$HOME/.cache/vereda-orbital/sessions.json"
 grep -q "vereda-orbital/presence.sh" "$HOME/.claude/settings.json" 2>/dev/null ||
   echo "Session lights are off until you run: $kit/hooks.py add"
+
+# --- vereda-weather ---------------------------------------------------------------------------
+# The band's own weather and air traffic: a small simulation (weather/sim.py) runs as a user
+# service, a step a minute, and leaves the maps the wallpaper draws its clouds from, and the
+# aircraft it draws, in ~/.cache/vereda-orbital/weather/. It needs numpy and Pillow in a venv of
+# its own, and the land and towns maps rendered with the shader so that its land, sea and
+# airports are the drawn ones; given a different land map it starts its weather afresh. The
+# unit lives with user units that come from packages, so ~/.config only gets the link that
+# enables it.
+weather="$kit/weather"
+if [[ ! -x $weather/.venv/bin/python ]]; then
+  python3 -m venv "$weather/.venv"
+  "$weather/.venv/bin/pip" install --quiet numpy pillow
+fi
+"$weather/landmap.sh" >/dev/null
+units="$HOME/.local/share/systemd/user"
+mkdir -p "$units"
+sed "s|@KIT@|$kit|g" "$weather/vereda-weather.service" >"$units/vereda-weather.service"
+systemctl --user daemon-reload
+systemctl --user enable --quiet vereda-weather.service
+# A restart picks up a new sim.py or land map; the weather is saved on the way out and resumed.
+systemctl --user restart vereda-weather.service
+# --- end vereda-weather -----------------------------------------------------------------------
 
 current=$(omarchy theme current)
 [[ $current == "Vereda Orbital" ]] || echo "$current" >"$kit/.previous-theme"

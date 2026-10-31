@@ -38,8 +38,7 @@ var defaults = {
   sway: 0.6,       // slow look-around over ~26 min, degrees
   speed: 1.0,      // scene seconds per real second
   places: 36,      // degrees along the ring between workspaces' places; 0 puts every workspace at phi
-  flyover: 150,    // seconds without input before the idle flyover starts; 0 turns it off
-  flyoverSpeed: 0.1 // how fast it drifts on along the ring, degrees a second (about 20 km/s)
+  screensaver: 900 // seconds without input before the idle screensaver comes up; 0 turns it off
 };
 
 // Each Hyprland workspace is its own place on the Orbital, workspace 1 at the look's phi and
@@ -90,15 +89,6 @@ function overheadFrame(p, t, h) {
   var fwd = norm(sub(o.at, o.cam)), right = norm(cross(fwd, [0, 0, 1])), up = cross(right, fwd);
   return {cam: o.cam, right: right, up: up, fwd: fwd, F: 1 / Math.tan(rad(o.fov) / 2), sun: lit.sun, dark: 0,
           exposure: p.exposure};
-}
-
-// The idle flyover's camera at scene time t, as overrides of the look it set out from: on along
-// the ring the way it faces, rising and settling a few hundred km over a few minutes, the view
-// dipping and lifting a little with it.
-function flyoverMotion(p, t) {
-  return {phi: p.phi + p.flyoverSpeed * t,
-          alt: p.alt + 260 * Math.sin(2 * Math.PI * t / 240),
-          pitch: p.pitch + 2.5 * Math.sin(2 * Math.PI * t / 300 + 1)};
 }
 
 // Where workspace n's place sits on the screen, as [x, y] from -1 to 1 (y up), for a view.

@@ -14,9 +14,6 @@ Item {
   property bool previewing: false       // a weather preview shows at once instead of easing
   property var sessions: []             // Claude Code sessions, shown as moored ships (OrbitalLights)
   property var meteorDate: null         // a preview date for the meteor calendar; null follows the clock
-  // Moves the camera from frame to frame without starting over, as the idle flyover does:
-  // function (look, sceneTime) returning overrides of the look, or null to hold still.
-  property var motion: null
   property var storms: []               // the weather simulation's storm cells, for the lightning
   signal frameFinished()
   signal lightning()                    // a strike, for its thunder
@@ -91,8 +88,9 @@ Item {
     if (slice === 0) {
       if (!painter.latchSky()) return false     // the weather maps are still loading
       updateLook()
-      painter.params = motion ? Scene.merge(look, motion(look, sceneTime)) : look
+      painter.params = look
       painter.hour = Scene.clockHour()
+      painter.clock = (Date.now() / 1000) % 604800
     }
     painter.frameOrigin = Qt.point(0, slice * sliceH)
     painter.sceneTime = sceneTime
@@ -183,6 +181,13 @@ Item {
     storms: orbital.storms
     active: orbital.running && orbital.ready && (orbital.storms.length > 0 || (!!orbital.look && orbital.look.storm > 0.5))
     onStruck: orbital.lightning()
+  }
+
+  OrbitalTraffic {
+    anchors.fill: parent
+    z: 4
+    painter: painter
+    animate: orbital.running
   }
 
   OrbitalLights {
